@@ -5,12 +5,15 @@ define([
   'duo',
   '../xhr/keys',
   '../xhr/well-known',
-  '../xhr/well-known-shared-resource'
+  '../xhr/well-known-shared-resource',
+  'idx',
+  '../xhr/v2/INTROSPECT'
 ],
-function (Okta, Q, Duo, keys, wellKnown, wellKnownSharedResource) {
+function (Okta, Q, Duo, keys, wellKnown, wellKnownSharedResource, idx, mockIntrospectResp) {
 
   var { _, $, Backbone } = Okta;
   var { Cookie } = Okta.internal.util;
+  //var { start } = idx.default;
 
   var fn = {};
 
@@ -54,14 +57,28 @@ function (Okta, Q, Duo, keys, wellKnown, wellKnownSharedResource) {
     }
   };
 
-  fn.mockIntrospectResponse = function (router) {
+  fn.mockIntrospectResponse = function (router, resp) {
+    spyOn(idx.default, 'start').and.callFake(function () {
+      var data =  {
+        rawIdxState: resp || mockIntrospectResp
+      };
+      return data;
+    });
     var token = 'dummy-token';
     router.settings.set('stateToken', token);
-    return router.settings.authClient.tx.introspect({
+    /*return router.settings.authClient.tx.introspect({
       stateToken: token,
     }).then(function (trans) {
       router.appState.set('introspectSuccess', trans);
+    });*/
+
+    var trans = idx.default.start({
+      'domain': router.settings.get('baseUrl'),
+      'stateHandle': token
     });
+    router.appState.set('idx', trans);
+    router.appState.set('introspectSuccess', trans.rawIdxState.response);
+    return Q({});
   };
 
 

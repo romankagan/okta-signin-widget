@@ -23,7 +23,6 @@ import Errors from 'util/Errors';
 import Logger from 'util/Logger';
 import AuthContainer from 'views/shared/AuthContainer';
 import Header from 'views/shared/Header';
-import actionsTransformer from './ion/actionsTransformer';
 import responseTransformer from './ion/responseTransformer';
 import uiSchemaTransformer from './ion/uiSchemaTransformer';
 import AppState from './models/AppState';
