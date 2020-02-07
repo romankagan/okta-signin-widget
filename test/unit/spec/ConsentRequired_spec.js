@@ -1,7 +1,7 @@
 /* eslint max-params: [2, 13], max-len: [2, 160] */
 define([
   'okta',
-  '@okta/okta-auth-js/jquery',
+  '@okta/okta-auth-js',
   'util/Util',
   'helpers/mocks/Util',
   'helpers/dom/ConsentRequiredForm',
@@ -15,7 +15,7 @@ define([
 function (Okta, OktaAuth, LoginUtil, Util, ConsentRequiredForm, Expect, Router,
   $sandbox, resConsentRequired, resSuccess, resCancel) {
 
-  var { _, $ } = Okta;
+  var { _ } = Okta;
   var itp = Expect.itp;
 
   function deepClone (res) {
@@ -26,9 +26,9 @@ function (Okta, OktaAuth, LoginUtil, Util, ConsentRequiredForm, Expect, Router,
     settings || (settings = {});
     var successSpy = jasmine.createSpy('successSpy');
     var setNextResponse = Util.mockAjax();
-    var baseUrl = 'https://example.okta.com';
-    var logoUrl = 'https://logo.com';
-    var authClient = new OktaAuth({url: baseUrl, transformErrorXHR: LoginUtil.transformErrorXHR});
+    var baseUrl = window.location.origin;
+    var logoUrl = '/img/logos/default.png';
+    var authClient = new OktaAuth({issuer: baseUrl, transformErrorXHR: LoginUtil.transformErrorXHR});
     var router = new Router(_.extend({
       el: $sandbox,
       baseUrl: baseUrl,
@@ -57,7 +57,7 @@ function (Okta, OktaAuth, LoginUtil, Util, ConsentRequiredForm, Expect, Router,
   function setupClientLogo () {
     var resConsentRequiredClientLogo = deepClone(resConsentRequired);
     var customLogo = {
-      href: 'https://example.com/custom-logo.png',
+      href: '/base/test/unit/assets/logo.svg',
       type: 'image/png'
     };
     resConsentRequiredClientLogo.response._embedded.target._links.logo = customLogo;
@@ -67,7 +67,7 @@ function (Okta, OktaAuth, LoginUtil, Util, ConsentRequiredForm, Expect, Router,
   function setupClientUri () {
     var resConsentRequiredClientUri = deepClone(resConsentRequired);
     resConsentRequiredClientUri.response._embedded.target._links['client-uri'] = {
-      href: 'http://example.com/client-uri.html',
+      href: `${window.location.origin}/client-uri.html`,
       type: 'text/html'
     };
     return setup(undefined, resConsentRequiredClientUri);
@@ -110,21 +110,21 @@ function (Okta, OktaAuth, LoginUtil, Util, ConsentRequiredForm, Expect, Router,
           expect(test.form.clientLogoLink())
             .toHaveLength(0);
           expect(test.form.clientLogo())
-            .toHaveAttr('src', 'https://example.okta.com/img/logos/default.png');
+            .toHaveAttr('src', `${window.location.origin}/img/logos/default.png`);
         });
       });
       itp('has the client uri', function () {
         return setupClientUri()
           .then(function (test) {
             expect(test.form.clientLogoLink())
-              .toHaveAttr('href', 'http://example.com/client-uri.html');
+              .toHaveAttr('href', `${window.location.origin}/client-uri.html`);
             expect(test.form.clientLogo())
-              .toHaveAttr('src', 'https://example.okta.com/img/logos/default.png');
+              .toHaveAttr('src', `${window.location.origin}/img/logos/default.png`);
           });
       });
       itp('has the correct client logo', function () {
         return setupClientLogo().then(function (test) {
-          expect(test.form.clientLogo()).toHaveAttr('src', 'https://example.com/custom-logo.png');
+          expect(test.form.clientLogo()).toHaveAttr('src', '/base/test/unit/assets/logo.svg');
         });
       });
       itp('has the correct app name in the title', function () {
@@ -140,12 +140,12 @@ function (Okta, OktaAuth, LoginUtil, Util, ConsentRequiredForm, Expect, Router,
       });
       itp('has the correct term of services link', function () {
         return setup().then(function (test) {
-          expect(test.form.termsOfService()).toHaveAttr('href', 'https://example.com/tos.html');
+          expect(test.form.termsOfService()).toHaveAttr('href', 'https://example.okta.com/tos.html');
         });
       });
       itp('has the correct privacy policy link', function () {
         return setup().then(function (test) {
-          expect(test.form.privacyPolicy()).toHaveAttr('href', 'https://example.com/policy.html');
+          expect(test.form.privacyPolicy()).toHaveAttr('href', 'https://example.okta.com/policy.html');
         });
       });
       itp('has the consent button', function () {
@@ -157,14 +157,14 @@ function (Okta, OktaAuth, LoginUtil, Util, ConsentRequiredForm, Expect, Router,
       });
       itp('consent button click makes the correct consent post', function () {
         return setup().then(function (test) {
-          $.ajax.calls.reset();
+          Util.resetAjaxRequests();
           test.setNextResponse(resSuccess);
           test.form.consentButton().click();
-          return Expect.waitForSpyCall($.ajax);
+          return Expect.waitForAjaxRequest();
         })
           .then(function () {
-            expect($.ajax.calls.count()).toBe(1);
-            Expect.isJsonPost($.ajax.calls.argsFor(0), {
+            expect(Util.numAjaxRequests()).toBe(1);
+            Expect.isJsonPost(Util.lastAjaxRequest(), {
               url: 'https://example.okta.com/api/v1/authn/consent',
               data: {
                 consent: {
@@ -187,16 +187,14 @@ function (Okta, OktaAuth, LoginUtil, Util, ConsentRequiredForm, Expect, Router,
         var cancel = jasmine.createSpy('cancel');
         return setup({ consent: { cancel } }).then(function (test) {
           spyOn(test.router.controller.options.appState, 'clearLastAuthResponse').and.callThrough();
-          $.ajax.calls.reset();
+          Util.resetAjaxRequests();
           test.setNextResponse(resCancel);
           test.form.cancelButton().click();
-          return Expect.wait(function () {
-            return $.ajax.calls.count() > 0;
-          }, test);
+          return Expect.waitForAjaxRequest(test);
         })
           .then(function (test) {
-            expect($.ajax.calls.count()).toBe(1);
-            Expect.isJsonPost($.ajax.calls.argsFor(0), {
+            expect(Util.numAjaxRequests()).toBe(1);
+            Expect.isJsonPost(Util.lastAjaxRequest(), {
               url: 'https://example.okta.com/api/v1/authn/cancel',
               data: {
                 stateToken: 'testStateToken'

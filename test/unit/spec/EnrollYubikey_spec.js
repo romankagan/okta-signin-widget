@@ -1,6 +1,6 @@
 define([
   'okta',
-  '@okta/okta-auth-js/jquery',
+  '@okta/okta-auth-js',
   'helpers/mocks/Util',
   'helpers/dom/EnrollTokenFactorForm',
   'helpers/dom/Beacon',
@@ -22,7 +22,7 @@ function (Okta, OktaAuth, Util, Form, Beacon, Expect, $sandbox,
     function setup (startRouter) {
       var setNextResponse = Util.mockAjax();
       var baseUrl = 'https://foo.com';
-      var authClient = new OktaAuth({url: baseUrl});
+      var authClient = new OktaAuth({issuer: baseUrl});
       var router = new Router({
         el: $sandbox,
         baseUrl: baseUrl,
@@ -95,23 +95,23 @@ function (Okta, OktaAuth, Util, Form, Beacon, Expect, $sandbox,
       });
       itp('does not send request and shows error if code is not entered', function () {
         return setup().then(function (test) {
-          $.ajax.calls.reset();
+          Util.resetAjaxRequests();
           test.form.submit();
           expect(test.form.hasErrors()).toBe(true);
-          expect($.ajax).not.toHaveBeenCalled();
+          expect(Util.numAjaxRequests()).toBe(0);
         });
       });
       itp('calls enroll with the right params', function () {
         return setup().then(function (test) {
-          $.ajax.calls.reset();
+          Util.resetAjaxRequests();
           test.form.setCode(123456);
           test.setNextResponse(resSuccess);
           test.form.submit();
           return tick();
         })
           .then(function () {
-            expect($.ajax.calls.count()).toBe(1);
-            Expect.isJsonPost($.ajax.calls.argsFor(0), {
+            expect(Util.numAjaxRequests()).toBe(1);
+            Expect.isJsonPost(Util.getAjaxRequest(0), {
               url: 'https://foo.com/api/v1/authn/factors',
               data: {
                 factorType: 'token:hardware',

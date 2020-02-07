@@ -280,16 +280,13 @@
   version "1.1.3"
   resolved "https://registry.yarnpkg.com/@nodelib/fs.stat/-/fs.stat-1.1.3.tgz#2b5a3ab3f918cca48a8c754c08168e3f03eba61b"
 
-"@okta/okta-auth-js@2.9.0":
-  version "2.9.0"
-  resolved "https://registry.yarnpkg.com/@okta/okta-auth-js/-/okta-auth-js-2.9.0.tgz#668cf95003cd2196871b98e13317d8f35f459108"
+"@okta/okta-auth-js@file:.yalc/@okta/okta-auth-js":
+  version "3.0.0-17176eb6"
   dependencies:
     Base64 "0.3.0"
     cross-fetch "^3.0.0"
     js-cookie "2.2.0"
     node-cache "^4.2.0"
-    q "1.4.1"
-    reqwest "2.0.5"
     tiny-emitter "1.1.0"
     xhr2 "0.1.3"
 
@@ -766,7 +763,7 @@ async@^2.0.0, async@^2.1.2, async@^2.6.0, async@^2.6.1:
   dependencies:
     lodash "^4.17.11"
 
-async@^2.6.2:
+async@^2.5.0, async@^2.6.2:
   version "2.6.3"
   resolved "https://registry.yarnpkg.com/async/-/async-2.6.3.tgz#d72625e2344a3656e3a3ad4fa749fa83299d82ff"
   dependencies:
@@ -8337,10 +8334,6 @@ requires-port@^1.0.0:
   version "1.0.0"
   resolved "https://registry.yarnpkg.com/requires-port/-/requires-port-1.0.0.tgz#925d2601d39ac485e091cf0da5c6e694dc3dcaff"
 
-reqwest@2.0.5:
-  version "2.0.5"
-  resolved "https://registry.yarnpkg.com/reqwest/-/reqwest-2.0.5.tgz#00fb15ac4918c419ca82b43f24c78882e66039a1"
-
 resolve-cwd@^1.0.0:
   version "1.0.0"
   resolved "https://registry.yarnpkg.com/resolve-cwd/-/resolve-cwd-1.0.0.tgz#4eaeea41ed040d1702457df64a42b2b07d246f9f"
@@ -8855,6 +8848,14 @@ sockjs@0.3.19:
 source-list-map@^2.0.0:
   version "2.0.1"
   resolved "https://registry.yarnpkg.com/source-list-map/-/source-list-map-2.0.1.tgz#3993bd873bfc48479cca9ea3a547835c7c154b34"
+
+source-map-loader@^0.2.4:
+  version "0.2.4"
+  resolved "https://registry.yarnpkg.com/source-map-loader/-/source-map-loader-0.2.4.tgz#c18b0dc6e23bf66f6792437557c569a11e072271"
+  integrity sha512-OU6UJUty+i2JDpTItnizPrlpOIBLmQbWMuBg9q5bVtnHACqw1tn9nNwqJLbv0/00JjnJb/Ee5g5WS5vrRv7zIQ==
+  dependencies:
+    async "^2.5.0"
+    loader-utils "^1.1.0"
 
 source-map-resolve@^0.5.0, source-map-resolve@^0.5.1:
   version "0.5.2"

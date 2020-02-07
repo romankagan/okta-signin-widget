@@ -1,7 +1,7 @@
 define([
   'q',
   'okta',
-  '@okta/okta-auth-js/jquery',
+  '@okta/okta-auth-js',
   'util/Util',
   'helpers/mocks/Util',
   'helpers/dom/PasswordResetForm',
@@ -84,7 +84,7 @@ function (Q, Okta, OktaAuth, LoginUtil, Util, PasswordResetForm, Beacon, Expect,
 
     var setNextResponse = Util.mockAjax();
     var baseUrl = 'https://foo.com';
-    var authClient = new OktaAuth({url: baseUrl, transformErrorXHR: LoginUtil.transformErrorXHR});
+    var authClient = new OktaAuth({issuer: baseUrl, transformErrorXHR: LoginUtil.transformErrorXHR});
     var router = new Router(_.extend({
       el: $sandbox,
       baseUrl: baseUrl,
@@ -128,7 +128,7 @@ function (Q, Okta, OktaAuth, LoginUtil, Util, PasswordResetForm, Beacon, Expect,
       return setup()
         .then(function (test) {
           spyOn(test.router.controller.options.appState, 'clearLastAuthResponse').and.callThrough();
-          $.ajax.calls.reset();
+          Util.resetAjaxRequests();
           test.setNextResponse(res200);
           var $link = test.form.signoutLink();
           expect($link.length).toBe(1);
@@ -136,8 +136,8 @@ function (Q, Okta, OktaAuth, LoginUtil, Util, PasswordResetForm, Beacon, Expect,
           return Expect.waitForPrimaryAuth(test);
         })
         .then(function (test) {
-          expect($.ajax.calls.count()).toBe(1);
-          Expect.isJsonPost($.ajax.calls.argsFor(0), {
+          expect(Util.numAjaxRequests()).toBe(1);
+          Expect.isJsonPost(Util.getAjaxRequest(0), {
             url: 'https://foo.com/api/v1/authn/cancel',
             data: {
               stateToken: 'testStateToken'
@@ -162,12 +162,12 @@ function (Q, Okta, OktaAuth, LoginUtil, Util, PasswordResetForm, Beacon, Expect,
           .then(function (test) {
             spyOn(test.router.controller.options.appState, 'clearLastAuthResponse').and.callThrough();
             spyOn(SharedUtil, 'redirect');
-            $.ajax.calls.reset();
+            Util.resetAjaxRequests();
             test.setNextResponse(res200);
             var $link = test.form.signoutLink();
             expect($link.length).toBe(1);
             $link.click();
-            return Expect.waitForSpyCall($.ajax, test);
+            return Expect.waitForAjaxRequest(test);
           })
           .then(test => {
             // `clearLastAuthResponse` will be invoked when response has no `status`
@@ -175,8 +175,8 @@ function (Q, Okta, OktaAuth, LoginUtil, Util, PasswordResetForm, Beacon, Expect,
             return Expect.waitForSpyCall(test.router.controller.options.appState.clearLastAuthResponse, test);
           })
           .then(function (test) {
-            expect($.ajax.calls.count()).toBe(1);
-            Expect.isJsonPost($.ajax.calls.argsFor(0), {
+            expect(Util.numAjaxRequests()).toBe(1);
+            Expect.isJsonPost(Util.getAjaxRequest(0), {
               url: 'https://foo.com/api/v1/authn/cancel',
               data: {
                 stateToken: 'testStateToken'
@@ -345,7 +345,7 @@ function (Q, Okta, OktaAuth, LoginUtil, Util, PasswordResetForm, Beacon, Expect,
       var processCredsSpy = jasmine.createSpy('processCredsSpy');
       return setup({ processCreds: processCredsSpy })
         .then(function (test) {
-          $.ajax.calls.reset();
+          Util.resetAjaxRequests();
           test.setNextResponse(resSuccess);
           test.form.setNewPassword('newpwd');
           test.form.setConfirmPassword('newpwd');
@@ -358,7 +358,7 @@ function (Q, Okta, OktaAuth, LoginUtil, Util, PasswordResetForm, Beacon, Expect,
             username: 'administrator1@clouditude.net',
             password: 'newpwd'
           });
-          expect($.ajax.calls.count()).toBe(1);
+          expect(Util.numAjaxRequests()).toBe(1);
         });
     });
 
@@ -371,7 +371,7 @@ function (Q, Okta, OktaAuth, LoginUtil, Util, PasswordResetForm, Beacon, Expect,
         }
       })
         .then(function (test) {
-          $.ajax.calls.reset();
+          Util.resetAjaxRequests();
           test.setNextResponse(resSuccess);
           test.form.setNewPassword('newpwd');
           test.form.setConfirmPassword('newpwd');
@@ -384,7 +384,7 @@ function (Q, Okta, OktaAuth, LoginUtil, Util, PasswordResetForm, Beacon, Expect,
             username: 'administrator1@clouditude.net',
             password: 'newpwd'
           }, jasmine.any(Function));
-          expect($.ajax.calls.count()).toBe(1);
+          expect(Util.numAjaxRequests()).toBe(1);
         });
     });
 
@@ -396,7 +396,7 @@ function (Q, Okta, OktaAuth, LoginUtil, Util, PasswordResetForm, Beacon, Expect,
         }
       })
         .then(function (test) {
-          $.ajax.calls.reset();
+          Util.resetAjaxRequests();
           test.setNextResponse(resSuccess);
           test.form.setNewPassword('newpwd');
           test.form.setConfirmPassword('newpwd');
@@ -409,14 +409,14 @@ function (Q, Okta, OktaAuth, LoginUtil, Util, PasswordResetForm, Beacon, Expect,
             username: 'administrator1@clouditude.net',
             password: 'newpwd'
           }, jasmine.any(Function));
-          expect($.ajax.calls.count()).toBe(0);
+          expect(Util.numAjaxRequests()).toBe(0);
         });
     });
 
     itp('makes the right auth request when form is submitted', function () {
       return setup()
         .then(function (test) {
-          $.ajax.calls.reset();
+          Util.resetAjaxRequests();
           test.form.setNewPassword('imsorrymsjackson');
           test.form.setConfirmPassword('imsorrymsjackson');
           test.setNextResponse(resSuccess);
@@ -424,8 +424,8 @@ function (Q, Okta, OktaAuth, LoginUtil, Util, PasswordResetForm, Beacon, Expect,
           return Expect.waitForSpyCall(test.successSpy);
         })
         .then(function () {
-          expect($.ajax.calls.count()).toBe(1);
-          Expect.isJsonPost($.ajax.calls.argsFor(0), {
+          expect(Util.numAjaxRequests()).toBe(1);
+          Expect.isJsonPost(Util.getAjaxRequest(0), {
             url: 'https://foo.com/api/v1/authn/credentials/reset_password',
             data: {
               newPassword: 'imsorrymsjackson',
@@ -439,7 +439,7 @@ function (Q, Okta, OktaAuth, LoginUtil, Util, PasswordResetForm, Beacon, Expect,
       var dummySaveEventHnadler = jasmine.createSpy();
       return setup()
         .then(function (test) {
-          $.ajax.calls.reset();
+          Util.resetAjaxRequests();
           // Submit form will trigger `save` event and its handler will
           // 'disable' the button. Thus when the `dummySaveEventHnadler`
           // has been invoked, we could reason the `save` event has been
@@ -464,7 +464,7 @@ function (Q, Okta, OktaAuth, LoginUtil, Util, PasswordResetForm, Beacon, Expect,
     itp('makes submit button enabled after error response', function () {
       return setup()
         .then(function (test) {
-          $.ajax.calls.reset();
+          Util.resetAjaxRequests();
           test.form.setNewPassword('pwd');
           test.form.setConfirmPassword('pwd');
           test.setNextResponse(resError);
@@ -480,9 +480,9 @@ function (Q, Okta, OktaAuth, LoginUtil, Util, PasswordResetForm, Beacon, Expect,
 
     itp('validates that the fields are not empty before submitting', function () {
       return setup().then(function (test) {
-        $.ajax.calls.reset();
+        Util.resetAjaxRequests();
         test.form.submit();
-        expect($.ajax).not.toHaveBeenCalled();
+        expect(Util.numAjaxRequests()).toBe(0);
         expect(test.form.hasErrors()).toBe(true);
         Expect.isEmptyFieldError(test.form.newPassFieldError());
         Expect.isEmptyFieldError(test.form.confirmPassFieldError());
@@ -491,11 +491,11 @@ function (Q, Okta, OktaAuth, LoginUtil, Util, PasswordResetForm, Beacon, Expect,
 
     itp('validates that the passwords match before submitting', function () {
       return setup().then(function (test) {
-        $.ajax.calls.reset();
+        Util.resetAjaxRequests();
         test.form.setNewPassword('a');
         test.form.setConfirmPassword('z');
         test.form.submit();
-        expect($.ajax).not.toHaveBeenCalled();
+        expect(Util.numAjaxRequests()).toBe(0);
         expect(test.form.hasErrors()).toBe(true);
       });
     });

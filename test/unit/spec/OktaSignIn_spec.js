@@ -72,9 +72,9 @@ function (Widget, Expect, Logger, $sandbox) {
         it('SIW passes all config within authParams to OktaAuth', function () {
           const authParams = {
             // known params
-            issuer: 'my-issuer',
+            issuer: 'https://my-issuer',
             authorizeUrl: 'fake-url',
-            pkce: true,
+            pkce: false,
           };
           signIn = new Widget({
             baseUrl: url,

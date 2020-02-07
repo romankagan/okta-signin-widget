@@ -1,7 +1,7 @@
 /* eslint max-params: [2, 13], max-len: [2, 160] */
 define([
   'okta',
-  '@okta/okta-auth-js/jquery',
+  '@okta/okta-auth-js',
   'util/Util',
   'helpers/mocks/Util',
   'helpers/dom/EnrollUserForm',
@@ -27,7 +27,7 @@ function (Okta, OktaAuth, LoginUtil, Util, EnrollUserForm, Expect, Router,
     setNextResponse(nextResponse);
     var baseUrl = 'https://example.okta.com';
     var logoUrl = 'https://logo.com';
-    var authClient = new OktaAuth({ url: baseUrl, transformErrorXHR: LoginUtil.transformErrorXHR });
+    var authClient = new OktaAuth({ issuer: baseUrl, transformErrorXHR: LoginUtil.transformErrorXHR });
     var router = new Router(_.extend({
       el: $sandbox,
       baseUrl: baseUrl,
@@ -94,7 +94,7 @@ function (Okta, OktaAuth, LoginUtil, Util, EnrollUserForm, Expect, Router,
         test.form.$('.registration-link').click();
         return Expect.waitForEnrollUser(test);
       }).then(function (test) {
-        $.ajax.calls.reset();
+        Util.resetAjaxRequests();
         test.setNextResponse(resSuccess);
         expect(test.form.formInputs('streetAddress').length).toEqual(1);
         expect(test.form.formInputs('streetAddress').hasClass('okta-form-input-field input-fix')).toBe(true);
@@ -107,8 +107,8 @@ function (Okta, OktaAuth, LoginUtil, Util, EnrollUserForm, Expect, Router,
         model.save();
         return Expect.waitForEnrollUser(test);
       }).then(function () {
-        expect($.ajax.calls.count()).toBe(1);
-        Expect.isJsonPost($.ajax.calls.argsFor(0), {
+        expect(Util.numAjaxRequests()).toBe(1);
+        Expect.isJsonPost(Util.getAjaxRequest(0), {
           url: 'https://foo.okta.com/api/v1/authn/enroll',
           data: {
             'registration': {
@@ -125,7 +125,7 @@ function (Okta, OktaAuth, LoginUtil, Util, EnrollUserForm, Expect, Router,
     });
     itp('enroll user form submit makes the correct post call', function () {
       return setupEnroll().then(function (test) {
-        $.ajax.calls.reset();
+        Util.resetAjaxRequests();
         test.setNextResponse(resSuccess);
         var model = test.router.controller.model;
         model.set('streetAddress', 'street address');
@@ -134,8 +134,8 @@ function (Okta, OktaAuth, LoginUtil, Util, EnrollUserForm, Expect, Router,
         model.save();
         return Expect.waitForEnrollUser(test);
       }).then(function () {
-        expect($.ajax.calls.count()).toBe(1);
-        Expect.isJsonPost($.ajax.calls.argsFor(0), {
+        expect(Util.numAjaxRequests()).toBe(1);
+        Expect.isJsonPost(Util.getAjaxRequest(0), {
           url: 'https://foo.okta.com/api/v1/authn/enroll',
           data: {
             'registration': {

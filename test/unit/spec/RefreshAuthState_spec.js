@@ -1,7 +1,7 @@
 define([
   'q',
   'okta',
-  '@okta/okta-auth-js/jquery',
+  '@okta/okta-auth-js',
   'helpers/mocks/Util',
   'helpers/dom/Beacon',
   'helpers/dom/Form',
@@ -20,7 +20,7 @@ function (Q, Okta, OktaAuth, Util, Beacon, FormView, Expect,
   function setup (settings) {
     var setNextResponse = Util.mockAjax();
     var baseUrl = 'https://foo.com';
-    var authClient = new OktaAuth({ url: baseUrl });
+    var authClient = new OktaAuth({ issuer: baseUrl });
     var router = new Router(_.extend({
       el: $sandbox,
       baseUrl: baseUrl,
@@ -64,8 +64,8 @@ function (Q, Okta, OktaAuth, Util, Beacon, FormView, Expect,
           return Expect.waitForEnrollChoices();
         })
         .then(function () {
-          expect($.ajax.calls.count()).toBe(1);
-          Expect.isJsonPost($.ajax.calls.argsFor(0), {
+          expect(Util.numAjaxRequests()).toBe(1);
+          Expect.isJsonPost(Util.getAjaxRequest(0), {
             url: 'https://foo.com/api/v1/authn',
             data: {
               stateToken: 'a-token-in-cookie'
@@ -81,8 +81,8 @@ function (Q, Okta, OktaAuth, Util, Beacon, FormView, Expect,
           return Expect.waitForEnrollChoices();
         })
         .then(function () {
-          expect($.ajax.calls.count()).toBe(1);
-          Expect.isJsonPost($.ajax.calls.argsFor(0), {
+          expect(Util.numAjaxRequests()).toBe(1);
+          Expect.isJsonPost(Util.getAjaxRequest(0), {
             url: 'https://foo.com/api/v1/authn',
             data: {
               stateToken: 'dummy-token',
@@ -104,8 +104,8 @@ function (Q, Okta, OktaAuth, Util, Beacon, FormView, Expect,
           return Expect.waitForEnrollChoices();
         })
         .then(function () {
-          expect($.ajax.calls.count()).toBe(1);
-          Expect.isJsonPost($.ajax.calls.argsFor(0), {
+          expect(Util.numAjaxRequests()).toBe(1);
+          Expect.isJsonPost(Util.getAjaxRequest(0), {
             url: 'https://foo.com/idp/idx/introspect',
             data: {
               stateToken: 'dummy-token'
