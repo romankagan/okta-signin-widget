@@ -8,7 +8,7 @@ define([
   'util/Util',
   'util/Bundles',
   'config/config.json',
-  '@okta/okta-auth-js/jquery',
+  '@okta/okta-auth-js',
   'helpers/mocks/Util',
   'helpers/util/Expect',
   'LoginRouter',
@@ -76,7 +76,8 @@ function (Okta, Q, Logger, Errors, BrowserFeatures, WidgetUtil, Bundles, config,
       settings = settings || {};
       var setNextResponse = settings.mockAjax === false ? function () {} : Util.mockAjax();
       var baseUrl = 'https://foo.com';
-      var authClient = new OktaAuth({url: baseUrl, headers: {}});
+      var usePKCE = settings['authParams.pkce'] || false;
+      var authClient = new OktaAuth({issuer: baseUrl, pkce: usePKCE, headers: {}});
       var eventSpy = jasmine.createSpy('eventSpy');
       var afterRenderHandler = jasmine.createSpy('afterRenderHandler');
       var afterErrorHandler = jasmine.createSpy('afterErrorHandler');
@@ -169,6 +170,7 @@ function (Okta, Q, Logger, Errors, BrowserFeatures, WidgetUtil, Bundles, config,
       spyOn(BrowserFeatures, 'getUserLanguages').and.returnValue(options.userLanguages || []);
       spyOn(BrowserFeatures, 'localStorageIsNotSupported').and.returnValue(options.localStorageIsNotSupported);
 
+      var setNextJSONPResponse = Util.mockJSONP();
       return setup(options.settings)
         .then(function (test) {
           test.router.appState.on('loading', loadingSpy);
@@ -181,7 +183,7 @@ function (Okta, Q, Logger, Errors, BrowserFeatures, WidgetUtil, Bundles, config,
             if (options.mockLanguageRequest) {
               switch (options.mockLanguageRequest) {
               case 'ja':
-                test.setNextResponse([
+                setNextJSONPResponse([
                   _.extend({ delay: delay }, labelsLoginJa),
                   _.extend({ delay: delay }, labelsCountryJa)
                 ]);
@@ -306,9 +308,9 @@ function (Okta, Q, Logger, Errors, BrowserFeatures, WidgetUtil, Bundles, config,
       expect(err.name).toBe('CONFIG_ERROR');
       expect(err.message).toEqual('"el" is a required widget parameter');
     });
-    it('throws a ConfigError if baseUrl is not passed as a widget param', function () {
-      var fn = function () { setup({ authClient: new OktaAuth({baseUrl: undefined }) }); };
-      expect(fn).toThrowError('No url passed to constructor. Required usage: new OktaAuth({url: "https://{yourOktaDomain}.com"})');
+    it('throws a ConfigError if issuer is not passed as a widget param', function () {
+      var fn = function () { setup({ authClient: new OktaAuth({issuer: undefined }) }); };
+      expect(fn).toThrowError('No issuer passed to constructor. Required usage: new OktaAuth({issuer: "https://{yourOktaDomain}.com/oauth2/{authServerId}"})');
     });
     itp('renders the primary autenthentication form when no globalSuccessFn and globalErrorFn are passed as widget params', function () {
       return expectPrimaryAuthRender({ globalSuccessFn: undefined, globalErrorFn: undefined });
@@ -708,8 +710,8 @@ function (Okta, Q, Logger, Errors, BrowserFeatures, WidgetUtil, Bundles, config,
           return Expect.waitForRecoveryQuestion();
         })
         .then(function () {
-          expect($.ajax.calls.count()).toBe(2);
-          Expect.isJsonPost($.ajax.calls.argsFor(0), {
+          expect(Util.numAjaxRequests()).toBe(2);
+          Expect.isJsonPost(Util.getAjaxRequest(0), {
             url: 'https://foo.com/idp/idx/introspect',
             data: {
               stateToken: 'dummy-token'
@@ -728,8 +730,8 @@ function (Okta, Q, Logger, Errors, BrowserFeatures, WidgetUtil, Bundles, config,
           return Expect.waitForRecoveryQuestion();
         })
         .then(function () {
-          expect($.ajax.calls.count()).toBe(2);
-          Expect.isJsonPost($.ajax.calls.argsFor(0), {
+          expect(Util.numAjaxRequests()).toBe(2);
+          Expect.isJsonPost(Util.getAjaxRequest(0), {
             url: 'https://foo.com/idp/idx/introspect',
             data: {
               stateToken: 'dummy-token'
@@ -805,8 +807,8 @@ function (Okta, Q, Logger, Errors, BrowserFeatures, WidgetUtil, Bundles, config,
           return Expect.waitForPrimaryAuth(test);
         })
         .then(function (test) {
-          expect($.ajax.calls.count()).toBe(2);
-          Expect.isJsonPost($.ajax.calls.argsFor(0), {
+          expect(Util.numAjaxRequests()).toBe(2);
+          Expect.isJsonPost(Util.getAjaxRequest(0), {
             url: 'https://foo.com/idp/idx/introspect',
             data: {
               stateToken: 'dummy-token'
@@ -826,8 +828,8 @@ function (Okta, Q, Logger, Errors, BrowserFeatures, WidgetUtil, Bundles, config,
           return Expect.waitForIDPDiscovery(test);
         })
         .then(function (test) {
-          expect($.ajax.calls.count()).toBe(2);
-          Expect.isJsonPost($.ajax.calls.argsFor(0), {
+          expect(Util.numAjaxRequests()).toBe(2);
+          Expect.isJsonPost(Util.getAjaxRequest(0), {
             url: 'https://foo.com/idp/idx/introspect',
             data: {
               stateToken: 'dummy-token'
@@ -874,20 +876,21 @@ function (Okta, Q, Logger, Errors, BrowserFeatures, WidgetUtil, Bundles, config,
           return Expect.waitForPrimaryAuth(test);
         })
         .then(function (test) {
-          Q.stopUnhandledRejectionTracking();
+          Expect.allowUnhandledPromiseRejection();
           test.setNextResponse([resMfaRequiredDuo, errorInvalidToken]);
           var form = new PrimaryAuthForm($sandbox);
           form.setUsername('testuser');
           form.setPassword('pass');
           form.submit();
-          return Expect.wait(() => {
-            return $.ajax.calls.count() === 2;
-          }, test);
+          return Expect.waitForAjaxRequests(2, test);
         })
         .then(function () {
-        // If we don't have our fix, there will be two PrimaryAuth forms
-          var form = new PrimaryAuthForm($sandbox);
-          expect(form.usernameField().length).toBe(1);
+          // 2nd form will appear until the fail() handler is called in BaseLoginRouter. With Q this happens on the next tick.
+          return Expect.wait(() => {
+            // If we don't have our fix, there will be two PrimaryAuth forms
+            var form = new PrimaryAuthForm($sandbox);
+            return form.usernameField().length === 1;
+          });
         });
     });
     itp('makes a call to previous if the page is refreshed in an MFA_CHALLENGE state', function () {
@@ -905,7 +908,7 @@ function (Okta, Q, Logger, Errors, BrowserFeatures, WidgetUtil, Bundles, config,
           var form = new MfaVerifyForm($sandbox);
           expect(form.isSecurityQuestion()).toBe(true);
           return Expect.wait(() => {
-            return $.ajax.calls.count() === 3;
+            return Util.numAjaxRequests() === 3;
           });
         });
     });
@@ -933,13 +936,13 @@ function (Okta, Q, Logger, Errors, BrowserFeatures, WidgetUtil, Bundles, config,
           expect(form.autoPushCheckbox().length).toBe(1);
           expect(form.isAutoPushChecked()).toBe(true);
           return Expect.wait(() => {
-            return $.ajax.calls.count() === 2;
+            return Util.numAjaxRequests() === 2;
           }, form);
         })
         .then(function (form) {
           expect(form.isPushSent()).toBe(true);
-          expect($.ajax.calls.count()).toBe(2);
-          Expect.isJsonPost($.ajax.calls.argsFor(0), {
+          expect(Util.numAjaxRequests()).toBe(2);
+          Expect.isJsonPost(Util.getAjaxRequest(0), {
             url: 'https://foo.com/api/v1/authn',
             data: {
               password: 'pass',
@@ -951,7 +954,7 @@ function (Okta, Q, Logger, Errors, BrowserFeatures, WidgetUtil, Bundles, config,
               }
             }
           });
-          Expect.isJsonPost($.ajax.calls.argsFor(1), {
+          Expect.isJsonPost(Util.getAjaxRequest(1), {
             url: 'https://foo.com/api/v1/authn/factors/opfhw7v2OnxKpftO40g3/verify?autoPush=true&rememberDevice=false',
             data: {
               stateToken: 'testStateToken'
@@ -999,8 +1002,8 @@ function (Okta, Q, Logger, Errors, BrowserFeatures, WidgetUtil, Bundles, config,
           return Expect.waitForMfaVerify(test);
         })
         .then(function (test) {
-          expect($.ajax.calls.count()).toBe(1);
-          Expect.isJsonPost($.ajax.calls.argsFor(0), {
+          expect(Util.numAjaxRequests()).toBe(1);
+          Expect.isJsonPost(Util.getAjaxRequest(0), {
             url: 'https://foo.com/api/v1/authn',
             data: {
               password: 'pass',
@@ -1012,15 +1015,15 @@ function (Okta, Q, Logger, Errors, BrowserFeatures, WidgetUtil, Bundles, config,
               }
             }
           });
-          $.ajax.calls.reset();
+          Util.resetAjaxRequests();
           test.setNextResponse(resMfaChallengePush);
           var form = new MfaVerifyForm($sandbox);
           form.submit();
-          return Expect.waitForSpyCall($.ajax);
+          return Expect.waitForAjaxRequest();
         })
         .then(function () {
-          expect($.ajax.calls.count()).toBe(1);
-          Expect.isJsonPost($.ajax.calls.argsFor(0), {
+          expect(Util.numAjaxRequests()).toBe(1);
+          Expect.isJsonPost(Util.getAjaxRequest(0), {
             url: 'https://foo.com/api/v1/authn/factors/opfhw7v2OnxKpftO40g3/verify?autoPush=false&rememberDevice=false',
             data: {
               stateToken: 'testStateToken'
@@ -1050,7 +1053,7 @@ function (Okta, Q, Logger, Errors, BrowserFeatures, WidgetUtil, Bundles, config,
         expect(params.get('client_id')).toBe(clientId);
         expect(params.get('redirect_uri')).toBe(redirectUri);
         expect(params.get('response_type')).toBe(responseType);
-        expect(params.get('response_mode')).toBe(responseMode);
+        expect(params.get('response_mode')).toBe(responseMode || null);
         expect(params.get('sessionToken')).toBe(sessionToken);
         expect(params.get('scope')).toBe(scope);
 
@@ -1095,22 +1098,35 @@ function (Okta, Q, Logger, Errors, BrowserFeatures, WidgetUtil, Bundles, config,
           });
       });
 
-      itp('PKCE: redirects, sets the responseMode to "fragment" and sets a code_challenge', function () {
+      itp('PKCE: redirects, sets a code_challenge', function () {
         return setupOAuth2({
           'authParams.pkce': true,
           'authParams.responseType': 'code',
         })
           .then(expectCodeRedirect({
-            responseMode: 'fragment',
             responseType:'code',
             code_challenge_method: 'S256'
           }));
       });
+
+      itp('PKCE: redirects, can set the responseMode to "fragment"', function () {
+        return setupOAuth2({
+          'authParams.pkce': true,
+          'authParams.responseType': 'code',
+          'authParams.responseMode': 'fragment'
+        })
+          .then(expectCodeRedirect({
+            responseType:'code',
+            responseMode: 'fragment',
+            code_challenge_method: 'S256'
+          }));
+      });
+
       itp('redirects instead of using an iframe if the responseType is "code"', function () {
         return setupOAuth2({
           'authParams.responseType': 'code', 
         })
-          .then(expectCodeRedirect({responseMode: 'query', responseType:'code'}));
+          .then(expectCodeRedirect({responseType:'code'}));
       });
       itp('redirects to alternate authorizeUrl if the responseType is "code"', function () {
         return setupOAuth2({
@@ -1119,7 +1135,6 @@ function (Okta, Q, Logger, Errors, BrowserFeatures, WidgetUtil, Bundles, config,
         })
           .then(expectCodeRedirect({
             authorizeUrl: 'https://altfoo.com/oauth2/v1/authorize',
-            responseMode: 'query',
             responseType:'code'
           }));
       });
@@ -1130,7 +1145,6 @@ function (Okta, Q, Logger, Errors, BrowserFeatures, WidgetUtil, Bundles, config,
         })
           .then(expectCodeRedirect({
             authorizeUrl: 'https://altfoo.com/oauth2/v1/authorize',
-            responseMode: 'query',
             responseType:'code'
           }));
       });
@@ -1142,7 +1156,6 @@ function (Okta, Q, Logger, Errors, BrowserFeatures, WidgetUtil, Bundles, config,
         })
           .then(expectCodeRedirect({
             authorizeUrl: 'https://reallyaltfoo.com/oauth2/v1/authorize',
-            responseMode: 'query',
             responseType:'code'
           }));
       });
@@ -1153,7 +1166,6 @@ function (Okta, Q, Logger, Errors, BrowserFeatures, WidgetUtil, Bundles, config,
         })
           .then(expectCodeRedirect({
             state: 'myalternatestate',
-            responseMode: 'query',
             responseType:'code'
           }));
       });
@@ -1164,7 +1176,6 @@ function (Okta, Q, Logger, Errors, BrowserFeatures, WidgetUtil, Bundles, config,
         })
           .then(expectCodeRedirect({
             nonce: 'myalternatenonce',
-            responseMode: 'query',
             responseType:'code'
           }));
       });
@@ -1177,7 +1188,6 @@ function (Okta, Q, Logger, Errors, BrowserFeatures, WidgetUtil, Bundles, config,
           .then(expectCodeRedirect({
             state: 'myalternatestate',
             nonce: 'myalternatenonce',
-            responseMode: 'query',
             responseType:'code'
           }));
       });
@@ -1185,7 +1195,6 @@ function (Okta, Q, Logger, Errors, BrowserFeatures, WidgetUtil, Bundles, config,
       itp('redirects instead of using an iframe if display is "page"', function () {
         return setupOAuth2({'authParams.display': 'page'})
           .then(expectCodeRedirect({
-            responseMode: 'fragment',
             responseType: 'id_token',
             display: 'page'
           }));
@@ -1210,6 +1219,7 @@ function (Okta, Q, Logger, Errors, BrowserFeatures, WidgetUtil, Bundles, config,
             var callback = args[1];
             expect(type).toBe('message');
             expect($sandbox.find('#' + OIDC_IFRAME_ID).length).toBe(1);
+            Util.loadWellKnownAndKeysCache();
             callback.call(null, {
               origin: 'https://foo.com',
               data: {
@@ -1245,8 +1255,8 @@ function (Okta, Q, Logger, Errors, BrowserFeatures, WidgetUtil, Bundles, config,
             expect(successSpy.calls.count()).toBe(1);
             var data = successSpy.calls.argsFor(0)[0];
             expect(data.status).toBe('SUCCESS');
-            expect(data.idToken).toBe(VALID_ID_TOKEN);
-            expect(data.claims).toEqual({
+            expect(data.tokens.idToken.value).toBe(VALID_ID_TOKEN);
+            expect(data.tokens.idToken.claims).toEqual({
               amr: ['pwd'],
               aud: 'someClientId',
               auth_time: 1451606400,
@@ -1576,7 +1586,7 @@ function (Okta, Q, Logger, Errors, BrowserFeatures, WidgetUtil, Bundles, config,
             form.setUsername('testuser');
             form.setPassword('testpassword');
             form.submit();
-            expect($.ajax.calls.mostRecent().args[0].headers['Accept-Language']).toBe('en');
+            expect(Util.lastAjaxRequest().requestHeaders['accept-language']).toBe('en');
 
             // Wait for login success
             return Expect.waitForSpyCall(success, test);
@@ -1603,7 +1613,7 @@ function (Okta, Q, Logger, Errors, BrowserFeatures, WidgetUtil, Bundles, config,
             form.setUsername('testuser');
             form.setPassword('testpassword');
             form.submit();
-            expect($.ajax.calls.all()[0].args[0].headers['Accept-Language']).toBe('ja');
+            expect(Util.lastAjaxRequest().requestHeaders['accept-language']).toBe('ja');
 
             // Wait for login success
             return Expect.waitForSpyCall(success, test);
@@ -1614,9 +1624,9 @@ function (Okta, Q, Logger, Errors, BrowserFeatures, WidgetUtil, Bundles, config,
     Expect.describe('Config: "assets"', function () {
 
       function expectBundles (baseUrl, login, country) {
-        expect($.ajax.calls.count()).toBe(3);
-        var loginCall = $.ajax.calls.argsFor(1)[0];
-        var countryCall = $.ajax.calls.argsFor(2)[0];
+        expect($.ajax.calls.count()).toBe(2);
+        var loginCall = $.ajax.calls.all()[0].args[0];
+        var countryCall = $.ajax.calls.all()[1].args[0]
         expect(loginCall).toEqual({
           cache: true,
           dataType: 'jsonp',
@@ -1761,8 +1771,8 @@ function (Okta, Q, Logger, Errors, BrowserFeatures, WidgetUtil, Bundles, config,
             }
           })
             .then(function () {
-              var loginCall = $.ajax.calls.argsFor(1)[0];
-              var countryCall = $.ajax.calls.argsFor(2)[0];
+              var loginCall = $.ajax.calls.all()[0].args[0];
+              var countryCall = $.ajax.calls.all()[1].args[0];
               expect(loginCall.url).toBe('/assets/labels/jsonp/login_pt_BR.jsonp');
               expect(countryCall.url).toBe('/assets/labels/jsonp/country_pt_BR.jsonp');
             });
@@ -1779,8 +1789,8 @@ function (Okta, Q, Logger, Errors, BrowserFeatures, WidgetUtil, Bundles, config,
           })
             .then(function (test) {
               expectJa(test);
-              var loginCall = $.ajax.calls.argsFor(1)[0];
-              var countryCall = $.ajax.calls.argsFor(2)[0];
+              var loginCall = $.ajax.calls.all()[0].args[0];
+              var countryCall = $.ajax.calls.all()[1].args[0];
               expect(loginCall.url).toBe('/assets/labels/jsonp/login_ja.jsonp');
               expect(countryCall.url).toBe('/assets/labels/jsonp/country_ja.jsonp');
             });
@@ -1797,8 +1807,8 @@ function (Okta, Q, Logger, Errors, BrowserFeatures, WidgetUtil, Bundles, config,
           })
             .then(function (test) {
               expectJa(test);
-              var loginCall = $.ajax.calls.argsFor(1)[0];
-              var countryCall = $.ajax.calls.argsFor(2)[0];
+              var loginCall = $.ajax.calls.all()[0].args[0];
+              var countryCall = $.ajax.calls.all()[1].args[0];
               expect(loginCall.url).toBe('/assets/labels/jsonp/login_pt_BR.jsonp');
               expect(countryCall.url).toBe('/assets/labels/jsonp/country_pt_BR.jsonp');
             });
