@@ -48,10 +48,11 @@ define(['okta', './Enums', './Errors', './Util'], function (Okta, Enums, Errors,
 
     var authClient = settings.getAuthClient(),
         options = settings.toJSON({ verbose: true }),
-        getTokenOptions = {};
+        oauthParams = {},
+        extraOptions = {};
 
     _.extend(
-      getTokenOptions,
+      oauthParams,
       _.pick(options, 'clientId', 'redirectUri'),
       _.pick(options.authParams,
         'pkce',
@@ -62,37 +63,39 @@ define(['okta', './Enums', './Errors', './Util'], function (Okta, Enums, Errors,
     );
 
     // Extra Options for Social Idp popup window title and id_token response timeout
-    getTokenOptions.popupTitle = Okta.loc('socialauth.popup.title', 'login');
-    getTokenOptions.timeout = options.oAuthTimeout;
+    extraOptions.popupTitle = Okta.loc('socialauth.popup.title', 'login');
+    extraOptions.timeout = options.oAuthTimeout;
 
     _.extend(
-      getTokenOptions,
+      extraOptions,
       _.pick(options.authParams, 'issuer', 'authorizeUrl')
     );
 
     // Redirect flow - this can be used when logging into an external IDP, or
     // converting the Okta sessionToken to an access_token, id_token, and/or
     // authorization code. Note: The authorization code flow will always redirect.
-    if (getTokenOptions.display === 'page' || hasResponseType(getTokenOptions, 'code')) {
-      authClient.token.getWithRedirect(getTokenOptions)
-        .catch(error);
+    if (oauthParams.display === 'page' || hasResponseType(oauthParams, 'code')) {
+      authClient.token.getWithRedirect(oauthParams, extraOptions)
+        .fail(error);
     }
 
     // Default flow if logging in with Okta as the IDP - convert sessionToken to
     // tokens in a hidden iframe. Used in Single Page Apps where the app does
     // not want to redirect away from the page to convert the token.
-    else if (getTokenOptions.sessionToken) {
-      authClient.token.getWithoutPrompt(getTokenOptions)
+    else if (oauthParams.sessionToken) {
+      authClient.token.getWithoutPrompt(oauthParams, extraOptions)
         .then(success)
-        .catch(error);
+        .fail(error)
+        .done();
     }
 
     // Default flow if logging in with an external IDP - opens a popup and
     // gets the token from a postMessage response.
     else {
-      authClient.token.getWithPopup(getTokenOptions)
+      authClient.token.getWithPopup(oauthParams, extraOptions)
         .then(success)
-        .catch(error);
+        .fail(error)
+        .done();
     }
   };
 

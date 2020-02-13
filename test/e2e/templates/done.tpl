@@ -18,9 +18,11 @@ addMessageToPage('page', 'oidc_app');
 if (oktaSignIn.hasTokensInUrl()) {
   oktaSignIn.authClient.token.parseFromUrl()
     .then(function (res) {
-      var idToken = res.tokens.idToken;
-      if (idToken) {
-        addMessageToPage('idtoken_user', idToken.claims.name);
+      var tokens = Array.isArray(res) ? res : [res];
+      for (var i = 0; i < tokens.length; ++i) {
+        if (tokens[i].idToken) {
+          addMessageToPage('idtoken_user', tokens[i].claims.name);
+        }
       }
     })
     .catch(function (err) {

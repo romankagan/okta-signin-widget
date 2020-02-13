@@ -1,6 +1,6 @@
 /* eslint max-params: [2, 25] */
 import { _, $ } from 'okta';
-import OktaAuth from '@okta/okta-auth-js';
+import OktaAuth from '@okta/okta-auth-js/jquery';
 import Beacon from 'helpers/dom/Beacon';
 import FormView from 'helpers/dom/Form';
 import Util from 'helpers/mocks/Util';
@@ -14,7 +14,7 @@ const itp = Expect.itp;
 function setup (settings, resp) {
   const setNextResponse = Util.mockAjax();
   const baseUrl = 'https://foo.com';
-  const authClient = new OktaAuth({ issuer: baseUrl });
+  const authClient = new OktaAuth({ url: baseUrl });
   const router = new Router(_.extend({
     el: $sandbox,
     baseUrl: baseUrl,
@@ -43,11 +43,11 @@ Expect.describe('Introspect API', function () {
   itp('makes introspect API call to refresh auth state on render', function () {
     return setup({ stateToken: 'dummy-token' }, resFactorRequiredEmail)
       .then(function () {
-        return Expect.waitForAjaxRequest();
+        return Expect.waitForSpyCall($.ajax);
       })
       .then(function () {
-        expect(Util.numAjaxRequests()).toBe(1);
-        Expect.isJsonPost(Util.getAjaxRequest(0), {
+        expect($.ajax.calls.count()).toBe(1);
+        Expect.isJsonPost($.ajax.calls.argsFor(0), {
           url: 'https://foo.com/idp/idx/introspect',
           data: {
             stateToken: 'dummy-token',

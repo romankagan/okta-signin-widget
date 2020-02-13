@@ -4,7 +4,7 @@ define([
   'okta',
   'q',
   'duo',
-  '@okta/okta-auth-js',
+  '@okta/okta-auth-js/jquery',
   'util/Util',
   'helpers/mocks/Util',
   'helpers/dom/MfaVerifyForm',
@@ -143,15 +143,14 @@ function (Okta,
         globalSuccessFn: successSpy
       }, settings));
       Util.registerRouter(router);
-      Util.mockRouterNavigate(router, true);
+      Util.mockRouterNavigate(router);
       return router;
     }
 
     function setup (res, selectedFactorProps, settings, languagesResponse, useResForIntrospect) {
       var setNextResponse = Util.mockAjax();
-      var setNextJSONPResponse = Util.mockJSONP();
       var baseUrl = 'https://foo.com';
-      var authClient = new OktaAuth({issuer: baseUrl, transformErrorXHR: LoginUtil.transformErrorXHR});
+      var authClient = new OktaAuth({url: baseUrl, transformErrorXHR: LoginUtil.transformErrorXHR});
       var successSpy = jasmine.createSpy('success');
       var afterErrorHandler = jasmine.createSpy('afterErrorHandler');
       var router = createRouter(baseUrl, authClient, successSpy, settings);
@@ -164,7 +163,7 @@ function (Okta,
       return Util.mockIntrospectResponse(router, resp).then(function () {
         setNextResponse(res);
         if (languagesResponse) {
-          setNextJSONPResponse(languagesResponse);
+          setNextResponse(languagesResponse);
         }
         router.refreshAuthState('dummy-token');
         return Expect.waitForMfaVerify()
@@ -231,7 +230,7 @@ function (Okta,
     function setupNoProvider (res, selectedFactorProps, settings) {
       var setNextResponse = Util.mockAjax();
       var baseUrl = 'https://foo.com';
-      var authClient = new OktaAuth({issuer: baseUrl, transformErrorXHR: LoginUtil.transformErrorXHR});
+      var authClient = new OktaAuth({url: baseUrl, transformErrorXHR: LoginUtil.transformErrorXHR});
       var successSpy = jasmine.createSpy('success');
       var afterErrorHandler = jasmine.createSpy('afterErrorHandler');
       var router = createRouter(baseUrl, authClient, successSpy, settings);
@@ -274,7 +273,7 @@ function (Okta,
     function setupWindowsHelloOnly () {
       var setNextResponse = Util.mockAjax();
       var baseUrl = 'https://foo.com';
-      var authClient = new OktaAuth({issuer: baseUrl, transformErrorXHR: LoginUtil.transformErrorXHR});
+      var authClient = new OktaAuth({url: baseUrl, transformErrorXHR: LoginUtil.transformErrorXHR});
       var successSpy = jasmine.createSpy('success');
       var router = createRouter(baseUrl, authClient, successSpy);
       setNextResponse([resRequiredWindowsHello, resChallengeWindowsHello, resSuccess]);
@@ -338,7 +337,7 @@ function (Okta,
       { factorType: 'assertion:oidc', provider: 'GENERIC_OIDC' });
     var setupClaimsProviderFactorWithIntrospect = _.partial(setup, resAllFactors,
       { factorType: 'claims_provider', provider: 'CUSTOM', });
-    var setupAllFactorsWithRouter = _.partial(setup, resAllFactors, null, { 'features.router': true, 'features.securityImage': true });
+    var setupAllFactorsWithRouter = _.partial(setup, resAllFactors, null, { 'features.router': true });
     function setupSecurityQuestionLocalized (options) {
       spyOn(BrowserFeatures, 'localStorageIsNotSupported').and.returnValue(options.localStorageIsNotSupported);
       spyOn(BrowserFeatures, 'getUserLanguages').and.returnValue(['ja', 'en']);
@@ -429,7 +428,7 @@ function (Okta,
 
       var setNextResponse = Util.mockAjax();
       var baseUrl = 'https://foo.com';
-      var authClient = new OktaAuth({issuer: baseUrl, transformErrorXHR: LoginUtil.transformErrorXHR});
+      var authClient = new OktaAuth({url: baseUrl, transformErrorXHR: LoginUtil.transformErrorXHR});
       var successSpy = jasmine.createSpy('success');
       var afterErrorHandler = jasmine.createSpy('afterErrorHandler');
       var router = createRouter(baseUrl, authClient, successSpy);
@@ -470,7 +469,7 @@ function (Okta,
       //get MFA_CHALLENGE, and routerUtil calls prev, to set state to MFA_REQUIRED
       var setNextResponse = Util.mockAjax([initResponse, resAllFactors]);
       var baseUrl = 'https://foo.com';
-      var authClient = new OktaAuth({issuer: baseUrl, transformErrorXHR: LoginUtil.transformErrorXHR});
+      var authClient = new OktaAuth({url: baseUrl, transformErrorXHR: LoginUtil.transformErrorXHR});
       var successSpy = jasmine.createSpy('success');
       var afterErrorHandler = jasmine.createSpy('afterErrorHandler');
       var router = createRouter(baseUrl, authClient, successSpy, options.settings);
@@ -626,10 +625,10 @@ function (Okta,
       spyOn(LoginUtil, 'callAfterTimeout').and.callFake(function () {
         return setTimeout(arguments[0]);
       });
-      Util.resetAjaxRequests();
+      $.ajax.calls.reset();
 
       // Mock calls to startVerifyFactorPoll to include a faster poll
-      // Util.speedUpPolling(test.ac);
+      Util.speedUpPolling(test.ac);
 
       // 1: Set for first verifyFactor
       // 2: Set for startVerifyFactorPoll
@@ -642,20 +641,13 @@ function (Okta,
         test.form = test.form[0];
       }
       test.form.submit();
-      return Expect.waitForAjaxRequests(1, test) // First tick - submit verifyFactor
-        .then(() => {
-          Util.callAllTimeouts();
-          return Expect.waitForAjaxRequests(2, test); // Second tick - start verifyFactor poll
-        })
-        .then(() => {
-          Util.callAllTimeouts();
-          return Expect.waitForAjaxRequests(3, test); // The next tick will trigger the final response
-        })
-        .then(() => {
-          return Expect.wait(function () {
-            return JSON.stringify(test.router.controller.model.appState.get('lastAuthResponse')) === JSON.stringify(finalResponse.response);
-          }, test);
-        });
+ 
+      // First tick - submit verifyFactor
+      // Second tick - start verifyFactor poll
+      // The next tick will trigger the final response
+      return Expect.wait(function () {
+        return JSON.stringify(test.router.controller.model.appState.get('lastAuthResponse')) === JSON.stringify(finalResponse.response);
+      }, test);
     }
 
     function expectHasRightBeaconImage (test, desiredClassName) {
@@ -799,7 +791,7 @@ function (Okta,
       itp('is able to switch between factors even when the auth status is MF_CHALLENGE', function () {
         spyOn(Duo, 'init');
         return setup(allFactorsRes).then(function (test) {
-          Util.resetAjaxRequests();
+          $.ajax.calls.reset();
           test.setNextResponse(resChallengeDuo);
           test.beacon.dropDownButton().click();
           clickFactorInDropdown(test, 'DUO');
@@ -834,7 +826,7 @@ function (Okta,
             return Expect.waitForVerifyQuestion(test);
           })
           .then(function (test) {
-            Util.resetAjaxRequests();
+            $.ajax.calls.reset();
             test.setNextResponse(successRes);
             // We cannot use test.form here since refers to SMS form,
             // so query for the security question form.
@@ -844,8 +836,8 @@ function (Okta,
             return Expect.waitForSpyCall(test.successSpy);
           })
           .then(function () {
-            expect(Util.numAjaxRequests()).toBe(1);
-            Expect.isJsonPost(Util.getAjaxRequest(0), {
+            expect($.ajax.calls.count()).toBe(1);
+            Expect.isJsonPost($.ajax.calls.argsFor(0), {
               url: 'https://foo.com/api/v1/authn/factors/ufshpdkgNun3xNE3W0g3/verify?rememberDevice=false',
               data: {
                 answer: 'food',
@@ -877,7 +869,7 @@ function (Okta,
             return tick(test);
           })
           .then(function (test) {
-            Util.resetAjaxRequests();
+            $.ajax.calls.reset();
             test.setNextResponse(successRes);
             // We cannot use test.form here since refers to SMS form,
             // so query for the google TOTP form.
@@ -887,8 +879,8 @@ function (Okta,
             return tick(test);
           })
           .then(function () {
-            expect(Util.numAjaxRequests()).toBe(1);
-            Expect.isJsonPost(Util.getAjaxRequest(0), {
+            expect($.ajax.calls.count()).toBe(1);
+            Expect.isJsonPost($.ajax.calls.argsFor(0), {
               url: 'https://foo.com/api/v1/authn/factors/ufthp18Zup4EGLtrd0g3/verify?rememberDevice=false',
               data: {
                 passCode: '123456',
@@ -964,7 +956,7 @@ function (Okta,
       });
       itp('calls authClient verifyFactor with correct args when submitted', function () {
         return setupFn().then(function (test) {
-          Util.resetAjaxRequests();
+          $.ajax.calls.reset();
           test.form.setAnswer('food');
           test.form.setRememberDevice(true);
           test.setNextResponse(resSuccess);
@@ -972,8 +964,8 @@ function (Okta,
           return Expect.waitForSpyCall(test.successSpy);
         })
           .then(function () {
-            expect(Util.numAjaxRequests()).toBe(1);
-            Expect.isJsonPost(Util.getAjaxRequest(0), {
+            expect($.ajax.calls.count()).toBe(1);
+            Expect.isJsonPost($.ajax.calls.argsFor(0), {
               url: 'https://foo.com/api/v1/authn/factors/ufshpdkgNun3xNE3W0g3/verify?rememberDevice=true',
               data: {
                 answer: 'food',
@@ -984,7 +976,7 @@ function (Okta,
       });
       itp('disables the "verify button" when clicked', function () {
         return setupFn().then(function (test) {
-          Util.resetAjaxRequests();
+          $.ajax.calls.reset();
           test.form.setAnswer('who cares');
           test.setNextResponse(resInvalid);
           test.form.submit();
@@ -1017,13 +1009,13 @@ function (Okta,
       itp('shows errors if verify button is clicked and answer is empty', function () {
         return setupFn()
           .then(function (test) {
-            Util.resetAjaxRequests();
+            $.ajax.calls.reset();
             test.form.setAnswer('');
             test.form.submit();
             return Expect.waitForFormError(test.form, test);
           })
           .then(function (test) {
-            expect(Util.numAjaxRequests()).toBe(0);
+            expect($.ajax).not.toHaveBeenCalled();
             expect(test.form.passCodeErrorField().length).toBe(1);
             expect(test.form.passCodeErrorField().text()).toBe('This field cannot be left blank');
             expect(test.form.errorMessage()).toBe('We found some errors. Please review the form and make corrections.');
@@ -1033,7 +1025,7 @@ function (Okta,
         return setupFn()
           .then(function (test) {
             mockTransactions(test.router.controller);
-            Util.resetAjaxRequests();
+            $.ajax.calls.reset();
             test.form.setAnswer('food');
             test.setNextResponse(resSuccess);
             test.form.submit();
@@ -1047,7 +1039,7 @@ function (Okta,
         return setupFn()
           .then(function (test) {
             mockTransactions(test.router.controller);
-            Util.resetAjaxRequests();
+            $.ajax.calls.reset();
             test.form.setAnswer('food');
             test.setNextResponse(resInvalid);
             test.form.submit();
@@ -1131,14 +1123,14 @@ function (Okta,
       });
       itp('calls verifyFactor with empty code if send code button is clicked', function () {
         return setupFn().then(function (test) {
-          Util.resetAjaxRequests();
+          $.ajax.calls.reset();
           test.setNextResponse(challengeSmsRes);
           test.form.smsSendCode().click();
           return tick();
         })
           .then(function () {
-            expect(Util.numAjaxRequests()).toBe(1);
-            Expect.isJsonPost(Util.getAjaxRequest(0), {
+            expect($.ajax.calls.count()).toBe(1);
+            Expect.isJsonPost($.ajax.calls.argsFor(0), {
               url: 'https://foo.com/api/v1/authn/factors/smshp9NXcoXu8z2wN0g3/verify?rememberDevice=false',
               data: {
                 passCode: '',
@@ -1148,8 +1140,8 @@ function (Okta,
           });
       });
 
-      itp('posts resend if send code button is clicked second time', function () {
-        Util.mockQDelay();
+      it('posts resend if send code button is clicked second time', function () {
+        Util.speedUpPolling();
         return setupFn().then(function (test) {
           test.setNextResponse(challengeSmsRes);
           expect(test.form.smsSendCode().text()).toBe('Send code');
@@ -1160,7 +1152,7 @@ function (Okta,
         })
           .then(function (test) {
             expect(test.form.submitButton().prop('disabled')).toBe(false);
-            Util.resetAjaxRequests();
+            $.ajax.calls.reset();
             test.setNextResponse(challengeSmsRes);
             test.form.smsSendCode().click();
             return Expect.wait(function () {
@@ -1173,9 +1165,9 @@ function (Okta,
             }, test);
           })
           .then(function (test) {
-            expect(Util.numAjaxRequests()).toBe(1);
+            expect($.ajax.calls.count()).toBe(1);
             expect(test.form.submitButton().prop('disabled')).toBe(false);
-            Expect.isJsonPost(Util.getAjaxRequest(0), {
+            Expect.isJsonPost($.ajax.calls.argsFor(0), {
               url: 'https://foo.com/api/v1/authn/factors/smshp9NXcoXu8z2wN0g3/verify/resend',
               data: {
                 stateToken: expectedStateToken
@@ -1184,7 +1176,7 @@ function (Okta,
           });
       });
       it('shows warning message to click "Re-send" after 30s', function () {
-        Util.mockQDelay();
+        Util.speedUpPolling();
         return setupFn().then(function (test) {
           test.setNextResponse(challengeSmsRes);
           expect(test.form.smsSendCode().text()).toBe('Send code');
@@ -1199,7 +1191,7 @@ function (Okta,
               'Haven\'t received an SMS? To try again, click Re-send code.');
 
             // Re-send will clear the warning
-            Util.resetAjaxRequests();
+            $.ajax.calls.reset();
             test.setNextResponse(challengeSmsRes);
             test.form.smsSendCode().click();
             expect(test.form.smsSendCode().text()).toBe('Sent');
@@ -1217,15 +1209,15 @@ function (Okta,
       });
       itp('calls verifyFactor with rememberDevice URL param', function () {
         return setupFn().then(function (test) {
-          Util.resetAjaxRequests();
+          $.ajax.calls.reset();
           test.form.setRememberDevice(true);
           test.setNextResponse(challengeSmsRes);
           test.form.smsSendCode().click();
           return tick();
         })
           .then(function () {
-            expect(Util.numAjaxRequests()).toBe(1);
-            Expect.isJsonPost(Util.getAjaxRequest(0), {
+            expect($.ajax.calls.count()).toBe(1);
+            Expect.isJsonPost($.ajax.calls.argsFor(0), {
               url: 'https://foo.com/api/v1/authn/factors/smshp9NXcoXu8z2wN0g3/verify?rememberDevice=true',
               data: {
                 passCode: '',
@@ -1236,20 +1228,20 @@ function (Okta,
       });
       itp('calls verifyFactor with empty code if verify button is clicked', function () {
         return setupFn().then(function (test) {
-          Util.resetAjaxRequests();
+          $.ajax.calls.reset();
           test.setNextResponse(challengeSmsRes);
           test.form.smsSendCode().click();
           return tick(test);
         })
           .then(function (test) {
-            Util.resetAjaxRequests();
+            $.ajax.calls.reset();
             test.setNextResponse(resSuccess);
             test.form.setAnswer('');
             test.form.submit();
             return tick(test);
           })
           .then(function (test) {
-            expect(Util.numAjaxRequests()).toBe(0);
+            expect($.ajax).not.toHaveBeenCalled();
             expect(test.form.passCodeErrorField().length).toBe(1);
             expect(test.form.passCodeErrorField().text()).toBe('This field cannot be left blank');
             expect(test.form.errorMessage()).toBe('We found some errors. Please review the form and make corrections.');
@@ -1257,21 +1249,21 @@ function (Okta,
       });
       itp('calls verifyFactor with given code if verify button is clicked', function () {
         return setupFn().then(function (test) {
-          Util.resetAjaxRequests();
+          $.ajax.calls.reset();
           test.setNextResponse(challengeSmsRes);
           test.form.smsSendCode().click();
           return tick(test);
         })
           .then(function (test) {
-            Util.resetAjaxRequests();
+            $.ajax.calls.reset();
             test.setNextResponse(resSuccess);
             test.form.setAnswer('123456');
             test.form.submit();
             return Expect.waitForSpyCall(test.successSpy);
           })
           .then(function () {
-            expect(Util.numAjaxRequests()).toBe(1);
-            Expect.isJsonPost(Util.getAjaxRequest(0), {
+            expect($.ajax.calls.count()).toBe(1);
+            Expect.isJsonPost($.ajax.calls.argsFor(0), {
               url: 'https://foo.com/api/v1/authn/factors/smshp9NXcoXu8z2wN0g3/verify?rememberDevice=false',
               data: {
                 passCode: '123456',
@@ -1283,13 +1275,13 @@ function (Okta,
       itp('shows errors if verify button is clicked and answer is empty', function () {
         return setupFn()
           .then(function (test) {
-            Util.resetAjaxRequests();
+            $.ajax.calls.reset();
             test.form.setAnswer('');
             test.form.submit();
             return Expect.waitForFormError(test.form, test);
           })
           .then(function (test) {
-            expect(Util.numAjaxRequests()).toBe(0);
+            expect($.ajax).not.toHaveBeenCalled();
             expect(test.form.passCodeErrorField().length).toBe(1);
             expect(test.form.passCodeErrorField().text()).toBe('This field cannot be left blank');
             expect(test.form.errorMessage()).toBe('We found some errors. Please review the form and make corrections.');
@@ -1297,22 +1289,22 @@ function (Okta,
       });
       itp('calls authClient verifyFactor with rememberDevice URL param', function () {
         return setupFn().then(function (test) {
-          Util.resetAjaxRequests();
+          $.ajax.calls.reset();
           test.form.setRememberDevice(true);
           test.setNextResponse(challengeSmsRes);
           test.form.smsSendCode().click();
           return tick(test);
         })
           .then(function (test) {
-            Util.resetAjaxRequests();
+            $.ajax.calls.reset();
             test.setNextResponse(resSuccess);
             test.form.setAnswer('123456');
             test.form.submit();
             return Expect.waitForSpyCall(test.successSpy);
           })
           .then(function () {
-            expect(Util.numAjaxRequests()).toBe(1);
-            Expect.isJsonPost(Util.getAjaxRequest(0), {
+            expect($.ajax.calls.count()).toBe(1);
+            Expect.isJsonPost($.ajax.calls.argsFor(0), {
               url: 'https://foo.com/api/v1/authn/factors/smshp9NXcoXu8z2wN0g3/verify?rememberDevice=true',
               data: {
                 passCode: '123456',
@@ -1498,16 +1490,16 @@ function (Okta,
       });
       itp('calls verifyFactor with empty code if call button is clicked', function () {
         return setupFn().then(function (test) {
-          Util.resetAjaxRequests();
+          $.ajax.calls.reset();
           test.setNextResponse(challengeCallRes);
           test.form.makeCall().click();
           return Expect.wait(function () {
-            return Util.numAjaxRequests() > 0;
+            return $.ajax.calls.count() > 0;
           }, test);
         })
           .then(function () {
-            expect(Util.numAjaxRequests()).toBe(1);
-            Expect.isJsonPost(Util.getAjaxRequest(0), {
+            expect($.ajax.calls.count()).toBe(1);
+            Expect.isJsonPost($.ajax.calls.argsFor(0), {
               url: 'https://foo.com/api/v1/authn/factors/clfk6mRsVLrhHznVe0g3/verify?rememberDevice=false',
               data: {
                 passCode: '',
@@ -1518,17 +1510,17 @@ function (Okta,
       });
       itp('calls verifyFactor with rememberDevice URL param', function () {
         return setupFn().then(function (test) {
-          Util.resetAjaxRequests();
+          $.ajax.calls.reset();
           test.form.setRememberDevice(true);
           test.setNextResponse(challengeCallRes);
           test.form.makeCall().click();
           return Expect.wait(function () {
-            return Util.numAjaxRequests() > 0;
+            return $.ajax.calls.count() > 0;
           }, test);
         })
           .then(function () {
-            expect(Util.numAjaxRequests()).toBe(1);
-            Expect.isJsonPost(Util.getAjaxRequest(0), {
+            expect($.ajax.calls.count()).toBe(1);
+            Expect.isJsonPost($.ajax.calls.argsFor(0), {
               url: 'https://foo.com/api/v1/authn/factors/clfk6mRsVLrhHznVe0g3/verify?rememberDevice=true',
               data: {
                 passCode: '',
@@ -1539,15 +1531,15 @@ function (Okta,
       });
       itp('calls verifyFactor with empty code if verify button is clicked', function () {
         return setupFn().then(function (test) {
-          Util.resetAjaxRequests();
+          $.ajax.calls.reset();
           test.setNextResponse(challengeCallRes);
           test.form.makeCall().click();
           return Expect.wait(function () {
-            return Util.numAjaxRequests() > 0;
+            return $.ajax.calls.count() > 0;
           }, test);
         })
           .then(function (test) {
-            Util.resetAjaxRequests();
+            $.ajax.calls.reset();
             test.setNextResponse(successRes);
             test.form.setAnswer('');
             expect(test.form.hasErrors()).toBe(false);
@@ -1555,7 +1547,7 @@ function (Okta,
             return Expect.waitForFormError(test.form, test);
           })
           .then(function (test) {
-            expect(Util.numAjaxRequests()).toBe(0);
+            expect($.ajax).not.toHaveBeenCalled();
             expect(test.form.passCodeErrorField().length).toBe(1);
             expect(test.form.passCodeErrorField().text()).toBe('This field cannot be left blank');
             expect(test.form.errorMessage()).toBe('We found some errors. Please review the form and make corrections.');
@@ -1563,23 +1555,23 @@ function (Okta,
       });
       itp('calls verifyFactor with given code if verify button is clicked', function () {
         return setupFn().then(function (test) {
-          Util.resetAjaxRequests();
+          $.ajax.calls.reset();
           test.setNextResponse(challengeCallRes);
           test.form.makeCall().click();
           return Expect.wait(function () {
-            return Util.numAjaxRequests() > 0;
+            return $.ajax.calls.count() > 0;
           }, test);
         })
           .then(function (test) {
-            Util.resetAjaxRequests();
+            $.ajax.calls.reset();
             test.setNextResponse(successRes);
             test.form.setAnswer('123456');
             test.form.submit();
             return Expect.waitForSpyCall(test.successSpy, test);
           })
           .then(function () {
-            expect(Util.numAjaxRequests()).toBe(1);
-            Expect.isJsonPost(Util.getAjaxRequest(0), {
+            expect($.ajax.calls.count()).toBe(1);
+            Expect.isJsonPost($.ajax.calls.argsFor(0), {
               url: 'https://foo.com/api/v1/authn/factors/clfk6mRsVLrhHznVe0g3/verify?rememberDevice=false',
               data: {
                 passCode: '123456',
@@ -1590,24 +1582,24 @@ function (Okta,
       });
       itp('calls authClient verifyFactor with rememberDevice URL param', function () {
         return setupFn().then(function (test) {
-          Util.resetAjaxRequests();
+          $.ajax.calls.reset();
           test.form.setRememberDevice(true);
           test.setNextResponse(challengeCallRes);
           test.form.makeCall().click();
           return Expect.wait(function () {
-            return Util.numAjaxRequests() > 0;
+            return $.ajax.calls.count() > 0;
           }, test);
         })
           .then(function (test) {
-            Util.resetAjaxRequests();
+            $.ajax.calls.reset();
             test.setNextResponse(successRes);
             test.form.setAnswer('123456');
             test.form.submit();
             return Expect.waitForSpyCall(test.successSpy, test);
           })
           .then(function () {
-            expect(Util.numAjaxRequests()).toBe(1);
-            Expect.isJsonPost(Util.getAjaxRequest(0), {
+            expect($.ajax.calls.count()).toBe(1);
+            Expect.isJsonPost($.ajax.calls.argsFor(0), {
               url: 'https://foo.com/api/v1/authn/factors/clfk6mRsVLrhHznVe0g3/verify?rememberDevice=true',
               data: {
                 passCode: '123456',
@@ -1619,13 +1611,13 @@ function (Okta,
       itp('shows errors if verify button is clicked and answer is empty', function () {
         return setupFn()
           .then(function (test) {
-            Util.resetAjaxRequests();
+            $.ajax.calls.reset();
             test.form.setAnswer('');
             test.form.submit();
             return Expect.waitForFormError(test.form, test);
           })
           .then(function (test) {
-            expect(Util.numAjaxRequests()).toBe(0);
+            expect($.ajax).not.toHaveBeenCalled();
             expect(test.form.passCodeErrorField().length).toBe(1);
             expect(test.form.passCodeErrorField().text()).toBe('This field cannot be left blank');
             expect(test.form.errorMessage()).toBe('We found some errors. Please review the form and make corrections.');
@@ -1743,7 +1735,7 @@ function (Okta,
       });
 
       itp('shows warning message to click "Redial" after 30s', function () {
-        Util.mockQDelay();
+        Util.speedUpPolling();
         return setupFn().then(function (test) {
           test.setNextResponse(challengeCallRes);
           expect(test.form.makeCall().text()).toBe('Call');
@@ -1759,7 +1751,7 @@ function (Okta,
               'Haven\'t received a voice call? To try again, click Redial.');
 
             // Re-send will clear the warning
-            Util.resetAjaxRequests();
+            $.ajax.calls.reset();
             test.setNextResponse(challengeCallRes);
             test.form.makeCall().click();
             expect(test.form.makeCall().text()).toBe('Calling');
@@ -1777,7 +1769,7 @@ function (Okta,
           });
       });
       itp('posts to resend link if call button is clicked for the second time', function () {
-        Util.mockQDelay();
+        Util.speedUpPolling();
         return setupCall().then(function (test) {
           test.setNextResponse(challengeCallRes);
           expect(test.form.makeCall().text()).toBe('Call');
@@ -1788,7 +1780,7 @@ function (Okta,
         })
           .then(function (test) {
             expect(test.form.submitButton().prop('disabled')).toBe(false);
-            Util.resetAjaxRequests();
+            $.ajax.calls.reset();
             test.setNextResponse(challengeCallRes);
             test.form.makeCall().click();
             return Expect.wait(function () {
@@ -1802,8 +1794,8 @@ function (Okta,
           })
           .then(function (test) {
             expect(test.form.submitButton().prop('disabled')).toBe(false);
-            expect(Util.numAjaxRequests()).toBe(1);
-            Expect.isJsonPost(Util.getAjaxRequest(0), {
+            expect($.ajax.calls.count()).toBe(1);
+            Expect.isJsonPost($.ajax.calls.argsFor(0), {
               data: { stateToken: expectedStateToken },
               url: 'https://foo.com/api/v1/authn/factors/clfk6mRsVLrhHznVe0g3/verify/resend'
             });
@@ -1851,15 +1843,15 @@ function (Okta,
       });
       itp('calls authClient verifyFactor with correct args when submitted', function () {
         return setupFn().then(function (test) {
-          Util.resetAjaxRequests();
+          $.ajax.calls.reset();
           test.form.setAnswer('123456');
           test.setNextResponse(resSuccess);
           test.form.submit();
           return Expect.waitForSpyCall(test.successSpy);
         })
           .then(function () {
-            expect(Util.numAjaxRequests()).toBe(1);
-            Expect.isJsonPost(Util.getAjaxRequest(0), {
+            expect($.ajax.calls.count()).toBe(1);
+            Expect.isJsonPost($.ajax.calls.argsFor(0), {
               url: 'https://foo.com/api/v1/authn/factors/ufthp18Zup4EGLtrd0g3/verify?rememberDevice=false',
               data: {
                 passCode: '123456',
@@ -1870,7 +1862,7 @@ function (Okta,
       });
       itp('calls authClient verifyFactor with rememberDevice URL param', function () {
         return setupFn().then(function (test) {
-          Util.resetAjaxRequests();
+          $.ajax.calls.reset();
           test.form.setAnswer('123456');
           test.form.setRememberDevice(true);
           test.setNextResponse(resSuccess);
@@ -1878,8 +1870,8 @@ function (Okta,
           return Expect.waitForSpyCall(test.successSpy);
         })
           .then(function () {
-            expect(Util.numAjaxRequests()).toBe(1);
-            Expect.isJsonPost(Util.getAjaxRequest(0), {
+            expect($.ajax.calls.count()).toBe(1);
+            Expect.isJsonPost($.ajax.calls.argsFor(0), {
               url: 'https://foo.com/api/v1/authn/factors/ufthp18Zup4EGLtrd0g3/verify?rememberDevice=true',
               data: {
                 passCode: '123456',
@@ -1890,7 +1882,7 @@ function (Okta,
       });
       itp('disables the "verify button" when clicked', function () {
         return setupFn().then(function (test) {
-          Util.resetAjaxRequests();
+          $.ajax.calls.reset();
           test.form.setAnswer('who cares');
           test.setNextResponse(resInvalid);
           test.form.submit();
@@ -1903,7 +1895,7 @@ function (Okta,
           .then(function (test) {
             var button = test.form.submitButton();
             var buttonClass = button.attr('class');
-            expect(Util.numAjaxRequests()).toBe(1);
+            expect($.ajax.calls.count()).toBe(1);
             expect(buttonClass).not.toContain('link-button-disabled');
             expect(button.prop('disabled')).toBe(false);
           });
@@ -1940,13 +1932,13 @@ function (Okta,
       itp('shows errors if verify button is clicked and answer is empty', function () {
         return setupFn()
           .then(function (test) {
-            Util.resetAjaxRequests();
+            $.ajax.calls.reset();
             test.form.setAnswer('');
             test.form.submit();
             return Expect.waitForFormError(test.form, test);
           })
           .then(function (test) {
-            expect(Util.numAjaxRequests()).toBe(0);
+            expect($.ajax).not.toHaveBeenCalled();
             expect(test.form.passCodeErrorField().length).toBe(1);
             expect(test.form.passCodeErrorField().text()).toBe('This field cannot be left blank');
             expect(test.form.errorMessage()).toBe('We found some errors. Please review the form and make corrections.');
@@ -2024,7 +2016,7 @@ function (Okta,
       });
       itp('calls authClient verifyFactor with correct args when submitted', function () {
         return setupFn().then(function (test) {
-          Util.resetAjaxRequests();
+          $.ajax.calls.reset();
           test.form.setPassword('Abcd1234');
           test.form.setRememberDevice(true);
           test.setNextResponse(resSuccess);
@@ -2032,8 +2024,8 @@ function (Okta,
           return Expect.waitForSpyCall(test.successSpy);
         })
           .then(function () {
-            expect(Util.numAjaxRequests()).toBe(1);
-            Expect.isJsonPost(Util.getAjaxRequest(0), {
+            expect($.ajax.calls.count()).toBe(1);
+            Expect.isJsonPost($.ajax.calls.argsFor(0), {
               url: 'http://rain.okta1.com:1802/api/v1/authn/factors/password/verify?rememberDevice=true',
               data: {
                 password: 'Abcd1234',
@@ -2044,7 +2036,7 @@ function (Okta,
       });
       itp('disables the "verify button" when clicked', function () {
         return setupFn().then(function (test) {
-          Util.resetAjaxRequests();
+          $.ajax.calls.reset();
           test.form.setPassword('Abcd');
           test.setNextResponse(resInvalidPassword);
           test.form.submit();
@@ -2099,13 +2091,13 @@ function (Okta,
       itp('shows errors if verify button is clicked and password is empty', function () {
         return setupFn()
           .then(function (test) {
-            Util.resetAjaxRequests();
+            $.ajax.calls.reset();
             test.form.setPassword('');
             test.form.submit();
             return Expect.waitForFormError(test.form, test);
           })
           .then(function (test) {
-            expect(Util.numAjaxRequests()).toBe(0);
+            expect($.ajax).not.toHaveBeenCalled();
             expect(test.form.passwordErrorField().length).toBe(1);
             expect(test.form.passwordErrorField().text()).toBe('Please enter a password');
             expect(test.form.errorMessage()).toBe('We found some errors. Please review the form and make corrections.');
@@ -2115,7 +2107,7 @@ function (Okta,
         return setupFn()
           .then(function (test) {
             mockTransactions(test.router.controller);
-            Util.resetAjaxRequests();
+            $.ajax.calls.reset();
             test.form.setPassword('Abcd1234');
             test.setNextResponse(resSuccess);
             test.form.submit();
@@ -2129,7 +2121,7 @@ function (Okta,
         return setupFn()
           .then(function (test) {
             mockTransactions(test.router.controller);
-            Util.resetAjaxRequests();
+            $.ajax.calls.reset();
             test.form.setPassword('Abcd1234');
             test.setNextResponse(resInvalidPassword);
             test.form.submit();
@@ -2194,14 +2186,14 @@ function (Okta,
             .then(function (test) {
               spyOn(test.router.controller.options.appState, 'clearLastAuthResponse').and.callThrough();
               spyOn(RouterUtil, 'routeAfterAuthStatusChange').and.callThrough();
-              Util.resetAjaxRequests();
+              $.ajax.calls.reset();
               test.setNextResponse(resCancel);
               test.form.signoutLink($sandbox).click();
               return Expect.waitForPrimaryAuth(test);
             })
             .then(function (test) {
-              expect(Util.numAjaxRequests()).toBe(1);
-              Expect.isJsonPost(Util.getAjaxRequest(0), {
+              expect($.ajax.calls.count()).toBe(1);
+              Expect.isJsonPost($.ajax.calls.argsFor(0), {
                 url: 'https://foo.com/api/v1/authn/cancel',
                 data: {
                   stateToken: 'testStateToken'
@@ -2220,7 +2212,7 @@ function (Okta,
                 spyOn(test.router.controller.options.appState, 'clearLastAuthResponse').and.callThrough();
                 spyOn(RouterUtil, 'routeAfterAuthStatusChange').and.callThrough();
                 spyOn(SharedUtil, 'redirect');
-                Util.resetAjaxRequests();
+                $.ajax.calls.reset();
                 test.setNextResponse(resCancel);
                 test.form.signoutLink($sandbox).click();
                 return Expect.wait(function () {
@@ -2228,8 +2220,8 @@ function (Okta,
                 }, test);
               })
               .then(function (test) {
-                expect(Util.numAjaxRequests()).toBe(1);
-                Expect.isJsonPost(Util.getAjaxRequest(0), {
+                expect($.ajax.calls.count()).toBe(1);
+                Expect.isJsonPost($.ajax.calls.argsFor(0), {
                   url: 'https://foo.com/api/v1/authn/cancel',
                   data: {
                     stateToken: 'testStateToken'
@@ -2424,7 +2416,7 @@ function (Okta,
         });
         itp('disables the "verify button" when clicked', function () {
           return setupYubikey().then(function (test) {
-            Util.resetAjaxRequests();
+            $.ajax.calls.reset();
             test.form.setAnswer('who cares');
             test.setNextResponse(resInvalid);
             test.form.submit();
@@ -2443,15 +2435,15 @@ function (Okta,
         });
         itp('calls authClient verifyFactor with correct args when submitted', function () {
           return setupYubikey().then(function (test) {
-            Util.resetAjaxRequests();
+            $.ajax.calls.reset();
             test.form.setAnswer('123456');
             test.setNextResponse(resSuccess);
             test.form.submit();
             return Expect.waitForSpyCall(test.successSpy);
           })
             .then(function () {
-              expect(Util.numAjaxRequests()).toBe(1);
-              Expect.isJsonPost(Util.getAjaxRequest(0), {
+              expect($.ajax.calls.count()).toBe(1);
+              Expect.isJsonPost($.ajax.calls.argsFor(0), {
                 url: 'https://foo.com/api/v1/authn/factors/ykf2l0aUIe5VBplDj0g4/verify?rememberDevice=false',
                 data: {
                   passCode: '123456',
@@ -2462,7 +2454,7 @@ function (Okta,
         });
         itp('calls authClient verifyFactor with rememberDevice URL param', function () {
           return setupYubikey().then(function (test) {
-            Util.resetAjaxRequests();
+            $.ajax.calls.reset();
             test.form.setAnswer('123456');
             test.form.setRememberDevice(true);
             test.setNextResponse(resSuccess);
@@ -2470,8 +2462,8 @@ function (Okta,
             return Expect.waitForSpyCall(test.successSpy);
           })
             .then(function () {
-              expect(Util.numAjaxRequests()).toBe(1);
-              Expect.isJsonPost(Util.getAjaxRequest(0), {
+              expect($.ajax.calls.count()).toBe(1);
+              Expect.isJsonPost($.ajax.calls.argsFor(0), {
                 url: 'https://foo.com/api/v1/authn/factors/ykf2l0aUIe5VBplDj0g4/verify?rememberDevice=true',
                 data: {
                   passCode: '123456',
@@ -2588,17 +2580,17 @@ function (Okta,
           });
           itp('calls authClient verifyFactor with correct args when submitted', function () {
             return setupOktaPushWithIntrospect().then(function (test) {
-              Util.resetAjaxRequests();
+              $.ajax.calls.reset();
               setRememberDeviceForPushForm(test, true);
               test.setNextResponse(resSuccess);
               test.form.submit();
               return Expect.wait(function () {
-                return Util.numAjaxRequests() > 0;
+                return $.ajax.calls.count() > 0;
               }, test);
             })
               .then(function () {
-                expect(Util.numAjaxRequests()).toBe(1);
-                Expect.isJsonPost(Util.getAjaxRequest(0), {
+                expect($.ajax.calls.count()).toBe(1);
+                Expect.isJsonPost($.ajax.calls.argsFor(0), {
                   url: 'https://foo.com/api/v1/authn/factors/opfhw7v2OnxKpftO40g3/verify?rememberDevice=true',
                   data: {
                     stateToken: 'testStateToken'
@@ -2608,17 +2600,17 @@ function (Okta,
           });
           itp('calls authClient verifyFactor with correct args when autoPush is checked', function () {
             return setupOktaPushWithRefreshAuth({'features.autoPush': true}).then(function (test) {
-              Util.resetAjaxRequests();
+              $.ajax.calls.reset();
               setAutoPushCheckbox(test, true);
               test.setNextResponse(resSuccess);
               test.form[0].submit();
               return Expect.wait(function () {
-                return Util.numAjaxRequests() > 0;
+                return $.ajax.calls.count() > 0;
               }, test);
             })
               .then(function () {
-                expect(Util.numAjaxRequests()).toBe(1);
-                Expect.isJsonPost(Util.getAjaxRequest(0), {
+                expect($.ajax.calls.count()).toBe(1);
+                Expect.isJsonPost($.ajax.calls.argsFor(0), {
                   url: 'https://foo.com/api/v1/authn/factors/opfhw7v2OnxKpftO40g3/verify' +
                 '?autoPush=true&rememberDevice=false',
                   data: {
@@ -2629,17 +2621,17 @@ function (Okta,
           });
           itp('calls authClient verifyFactor with correct args when autoPush is not checked', function () {
             return setupOktaPushWithRefreshAuth({'features.autoPush': true}).then(function (test) {
-              Util.resetAjaxRequests();
+              $.ajax.calls.reset();
               setAutoPushCheckbox(test, false);
               test.setNextResponse(resSuccess);
               test.form[0].submit();
               return Expect.wait(function () {
-                return Util.numAjaxRequests() > 0;
+                return $.ajax.calls.count() > 0;
               }, test);
             })
               .then(function () {
-                expect(Util.numAjaxRequests()).toBe(1);
-                Expect.isJsonPost(Util.getAjaxRequest(0), {
+                expect($.ajax.calls.count()).toBe(1);
+                Expect.isJsonPost($.ajax.calls.argsFor(0), {
                   url: 'https://foo.com/api/v1/authn/factors/opfhw7v2OnxKpftO40g3/verify' +
                 '?autoPush=false&rememberDevice=false',
                   data: {
@@ -2654,9 +2646,9 @@ function (Okta,
                 setRememberDeviceForPushForm(test, true);
                 return setupPolling(test, resSuccess)
                   .then(function () {
-                    expect(Util.numAjaxRequests()).toBe(3);
+                    expect($.ajax.calls.count()).toBe(3);
                     // initial verifyFactor call
-                    Expect.isJsonPost(Util.getAjaxRequest(0), {
+                    Expect.isJsonPost($.ajax.calls.argsFor(0), {
                       url: 'https://foo.com/api/v1/authn/factors/opfhw7v2OnxKpftO40g3/verify?rememberDevice=true',
                       data: {
                         stateToken: 'testStateToken'
@@ -2664,7 +2656,7 @@ function (Okta,
                     });
 
                     // first startVerifyFactorPoll call
-                    Expect.isJsonPost(Util.getAjaxRequest(1), {
+                    Expect.isJsonPost($.ajax.calls.argsFor(1), {
                       url: 'https://foo.com/api/v1/authn/factors/opfhw7v2OnxKpftO40g3/verify',
                       data: {
                         stateToken: 'testStateToken'
@@ -2672,7 +2664,7 @@ function (Okta,
                     });
 
                     // last startVerifyFactorPoll call
-                    Expect.isJsonPost(Util.getAjaxRequest(2), {
+                    Expect.isJsonPost($.ajax.calls.argsFor(2), {
                       url: 'https://foo.com/api/v1/authn/factors/opfhw7v2OnxKpftO40g3/verify',
                       data: {
                         stateToken: 'testStateToken'
@@ -2686,9 +2678,9 @@ function (Okta,
                 setAutoPushCheckbox(test, true);
                 return setupPolling(test, resSuccess)
                   .then(function () {
-                    expect(Util.numAjaxRequests()).toBe(3);
+                    expect($.ajax.calls.count()).toBe(3);
                     // initial verifyFactor call
-                    Expect.isJsonPost(Util.getAjaxRequest(0), {
+                    Expect.isJsonPost($.ajax.calls.argsFor(0), {
                       url: 'https://foo.com/api/v1/authn/factors/opfhw7v2OnxKpftO40g3/verify' +
                     '?autoPush=true&rememberDevice=false',
                       data: {
@@ -2697,7 +2689,7 @@ function (Okta,
                     });
 
                     // first startVerifyFactorPoll call
-                    Expect.isJsonPost(Util.getAjaxRequest(1), {
+                    Expect.isJsonPost($.ajax.calls.argsFor(1), {
                       url: 'https://foo.com/api/v1/authn/factors/opfhw7v2OnxKpftO40g3/verify' +
                     '?autoPush=true&rememberDevice=false',
                       data: {
@@ -2706,7 +2698,7 @@ function (Okta,
                     });
 
                     // last startVerifyFactorPoll call
-                    Expect.isJsonPost(Util.getAjaxRequest(2), {
+                    Expect.isJsonPost($.ajax.calls.argsFor(2), {
                       url: 'https://foo.com/api/v1/authn/factors/opfhw7v2OnxKpftO40g3/verify' +
                     '?autoPush=true&rememberDevice=false',
                       data: {
@@ -2721,9 +2713,9 @@ function (Okta,
                 setAutoPushCheckbox(test, false);
                 return setupPolling(test, resSuccess)
                   .then(function () {
-                    expect(Util.numAjaxRequests()).toBe(3);
+                    expect($.ajax.calls.count()).toBe(3);
                     // initial verifyFactor call
-                    Expect.isJsonPost(Util.getAjaxRequest(0), {
+                    Expect.isJsonPost($.ajax.calls.argsFor(0), {
                       url: 'https://foo.com/api/v1/authn/factors/opfhw7v2OnxKpftO40g3/verify' +
                     '?autoPush=false&rememberDevice=false',
                       data: {
@@ -2732,7 +2724,7 @@ function (Okta,
                     });
 
                     // first startVerifyFactorPoll call
-                    Expect.isJsonPost(Util.getAjaxRequest(1), {
+                    Expect.isJsonPost($.ajax.calls.argsFor(1), {
                       url: 'https://foo.com/api/v1/authn/factors/opfhw7v2OnxKpftO40g3/verify' +
                     '?autoPush=false&rememberDevice=false',
                       data: {
@@ -2741,7 +2733,7 @@ function (Okta,
                     });
 
                     // last startVerifyFactorPoll call
-                    Expect.isJsonPost(Util.getAjaxRequest(2), {
+                    Expect.isJsonPost($.ajax.calls.argsFor(2), {
                       url: 'https://foo.com/api/v1/authn/factors/opfhw7v2OnxKpftO40g3/verify' +
                     '?autoPush=false&rememberDevice=false',
                       data: {
@@ -2757,9 +2749,9 @@ function (Okta,
                 setRememberDeviceForPushForm(test, true);
                 return setupPolling(test, resSuccess)
                   .then(function () {
-                    expect(Util.numAjaxRequests()).toBe(3);
+                    expect($.ajax.calls.count()).toBe(3);
                     // initial verifyFactor call
-                    Expect.isJsonPost(Util.getAjaxRequest(0), {
+                    Expect.isJsonPost($.ajax.calls.argsFor(0), {
                       url: 'https://foo.com/api/v1/authn/factors/opfhw7v2OnxKpftO40g3/verify' +
                     '?autoPush=true&rememberDevice=true',
                       data: {
@@ -2768,7 +2760,7 @@ function (Okta,
                     });
 
                     // first startVerifyFactorPoll call
-                    Expect.isJsonPost(Util.getAjaxRequest(1), {
+                    Expect.isJsonPost($.ajax.calls.argsFor(1), {
                       url: 'https://foo.com/api/v1/authn/factors/opfhw7v2OnxKpftO40g3/verify' +
                     '?autoPush=true&rememberDevice=true',
                       data: {
@@ -2777,7 +2769,7 @@ function (Okta,
                     });
 
                     // last startVerifyFactorPoll call
-                    Expect.isJsonPost(Util.getAjaxRequest(2), {
+                    Expect.isJsonPost($.ajax.calls.argsFor(2), {
                       url: 'https://foo.com/api/v1/authn/factors/opfhw7v2OnxKpftO40g3/verify' +
                     '?autoPush=true&rememberDevice=true',
                       data: {
@@ -2794,9 +2786,9 @@ function (Okta,
                   setRememberDeviceForPushForm(test, true);
                   return setupPolling(test, resSuccess)
                     .then(function () {
-                      expect(Util.numAjaxRequests()).toBe(3);
+                      expect($.ajax.calls.count()).toBe(3);
                       // initial verifyFactor call
-                      Expect.isJsonPost(Util.getAjaxRequest(0), {
+                      Expect.isJsonPost($.ajax.calls.argsFor(0), {
                         url: 'https://foo.com/api/v1/authn/factors/opfhw7v2OnxKpftO40g3/verify' +
                       '?autoPush=false&rememberDevice=true',
                         data: {
@@ -2805,7 +2797,7 @@ function (Okta,
                       });
 
                       // first startVerifyFactorPoll call
-                      Expect.isJsonPost(Util.getAjaxRequest(1), {
+                      Expect.isJsonPost($.ajax.calls.argsFor(1), {
                         url: 'https://foo.com/api/v1/authn/factors/opfhw7v2OnxKpftO40g3/verify' +
                       '?autoPush=false&rememberDevice=true',
                         data: {
@@ -2814,7 +2806,7 @@ function (Okta,
                       });
 
                       // last startVerifyFactorPoll call
-                      Expect.isJsonPost(Util.getAjaxRequest(2), {
+                      Expect.isJsonPost($.ajax.calls.argsFor(2), {
                         url: 'https://foo.com/api/v1/authn/factors/opfhw7v2OnxKpftO40g3/verify' +
                       '?autoPush=false&rememberDevice=true',
                         data: {
@@ -2830,12 +2822,12 @@ function (Okta,
                   .then(function () {
                     expect(test.form.submitButton().attr('class')).toMatch('link-button-disabled');
                     expect(test.form.submitButton().prop('disabled')).toBe(true);
-                    Util.resetAjaxRequests();
+                    $.ajax.calls.reset();
                     test.form.submit();
                     return tick(test); // Final tick - SUCCESS
                   })
                   .then(function () {
-                    expect(Util.numAjaxRequests()).toBe(0);
+                    expect($.ajax.calls.count()).toBe(0);
                   });
               });
             });
@@ -2856,7 +2848,7 @@ function (Okta,
             });
             itp('sets transaction state to MFA_CHALLENGE before poll', function () {
               return setupOktaPushWithIntrospect().then(function (test) {
-                Util.resetAjaxRequests();
+                $.ajax.calls.reset();
                 test.setNextResponse(resChallengePush);
                 test.form.submit();
                 return Expect.wait(function () {
@@ -2875,7 +2867,7 @@ function (Okta,
                     };
                   });
 
-                  Util.resetAjaxRequests();
+                  $.ajax.calls.reset();
                   test.setNextResponse(resChallengePush);
                   test.form.submit();
 
@@ -2907,7 +2899,7 @@ function (Okta,
                   // reducing the timeout to 100 so that test is fast.
                   return setTimeout(arguments[0], 100);
                 });
-                Util.resetAjaxRequests();
+                $.ajax.calls.reset();
                 test.setNextResponse([resChallengePush, resAllFactors]);
                 test.form[0].submit();
                 return Expect.wait(function () {
@@ -2959,27 +2951,22 @@ function (Okta,
                     expect(test.form.submitButton().prop('disabled')).toBe(false);
 
                     // Setup responses
-                    Util.resetAjaxRequests();
+                    $.ajax.calls.reset();
                     test.setNextResponse([resChallengePush, resChallengePush, resSuccess]);
 
                     // Click submit
                     test.form.submit();
-
-                    return Expect.waitForAjaxRequests(1, test) // 1: resChallengePush
-                      .then(() => {
-                        Util.callAllTimeouts();
-                        return Expect.waitForAjaxRequests(2, test); // 2: resChallengePush
-                      })
-                      .then(() => {
-                        Util.callAllTimeouts();
-                        return Expect.waitForAjaxRequests(3, test); // 3: resSuccess
-                      });
                   })
                   .then(function () {
-                    expect(Util.numAjaxRequests()).toBe(3);
+                    return Expect.wait(function () {
+                      return $.ajax.calls.count() === 3;
+                    }, test);
+                  })
+                  .then(function () {
+                    expect($.ajax.calls.count()).toBe(3);
 
                     // initial resendByName call
-                    Expect.isJsonPost(Util.getAjaxRequest(0), {
+                    Expect.isJsonPost($.ajax.calls.argsFor(0), {
                       url: 'https://foo.com/api/v1/authn/factors/opfhw7v2OnxKpftO40g3/verify/resend',
                       data: {
                         stateToken: 'testStateToken'
@@ -2987,7 +2974,7 @@ function (Okta,
                     });
 
                     // first startVerifyFactorPoll call
-                    Expect.isJsonPost(Util.getAjaxRequest(1), {
+                    Expect.isJsonPost($.ajax.calls.argsFor(1), {
                       url: 'https://foo.com/api/v1/authn/factors/opfhw7v2OnxKpftO40g3/verify',
                       data: {
                         stateToken: 'testStateToken'
@@ -2995,7 +2982,7 @@ function (Okta,
                     });
 
                     // last startVerifyFactorPoll call
-                    Expect.isJsonPost(Util.getAjaxRequest(2), {
+                    Expect.isJsonPost($.ajax.calls.argsFor(2), {
                       url: 'https://foo.com/api/v1/authn/factors/opfhw7v2OnxKpftO40g3/verify',
                       data: {
                         stateToken: 'testStateToken'
@@ -3021,43 +3008,12 @@ function (Okta,
                   return setTimeout(arguments[0]);
                 });
                 var failureResponse = {status: 0, response: {}};
-                Util.resetAjaxRequests();
-                // Util.speedUpPolling(test.ac);
+                $.ajax.calls.reset();
+                Util.speedUpPolling(test.ac);
                 test.setNextResponse([resChallengePush, resChallengePush, failureResponse, failureResponse,
                   failureResponse, failureResponse, failureResponse, failureResponse]);
                 test.form.submit();
-                return Expect.waitForAjaxRequests(1, test) // 1: resChallengePush
-                  .then(() => {
-                    Util.callAllTimeouts();
-                    return Expect.waitForAjaxRequests(2, test); // 2: resChallengePush
-                  })
-                  .then(() => {
-                    Util.callAllTimeouts();
-                    return Expect.waitForAjaxRequests(3, test); // 3: failureResponse
-                  })
-                  .then(() => {
-                    Util.callAllTimeouts();
-                    return Expect.waitForAjaxRequests(4, test); // 4: failureResponse
-                  })
-                  .then(() => {
-                    Util.callAllTimeouts();
-                    return Expect.waitForAjaxRequests(5, test); // 5: failureResponse
-                  })
-                  .then(() => {
-                    Util.callAllTimeouts();
-                    return Expect.waitForAjaxRequests(6, test); // 6: failureResponse
-                  })
-                  .then(() => {
-                    Util.callAllTimeouts();
-                    return Expect.waitForAjaxRequests(7, test); // 7: failureResponse
-                  })
-                  .then(() => {
-                    Util.callAllTimeouts();
-                    return Expect.waitForAjaxRequests(8, test); // 8: failureResponse
-                  })
-                  .then(() => {
-                    return Expect.waitForFormError(test.form, test);
-                  });
+                return Expect.waitForFormError(test.form, test);
               }
               return setupOktaPushWithIntrospect().then(function (test) {
                 spyOn(test.router.settings, 'callGlobalError');
@@ -3087,40 +3043,14 @@ function (Okta,
                   return setTimeout(arguments[0]);
                 });
                 var failureResponse = {status: 0, response: {}};
-                Util.resetAjaxRequests();
+                $.ajax.calls.reset();
+                Util.speedUpPolling(test.ac);
                 test.setNextResponse([resChallengePush, resChallengePush, failureResponse, failureResponse,
                   failureResponse, failureResponse, failureResponse, failureResponse]);
                 test.form.submit();
-                return Expect.waitForAjaxRequests(1, test) // 1: resChallengePush
-                  .then(() => {
-                    Util.callAllTimeouts();
-                    return Expect.waitForAjaxRequests(2, test); // 2: resChallengePush
-                  })
-                  .then(() => {
-                    Util.callAllTimeouts();
-                    return Expect.waitForAjaxRequests(3, test); // 3: failureResponse
-                  })
-                  .then(() => {
-                    Util.callAllTimeouts();
-                    return Expect.waitForAjaxRequests(4, test); // 4: failureResponse
-                  })
-                  .then(() => {
-                    Util.callAllTimeouts();
-                    return Expect.waitForAjaxRequests(5, test); // 5: failureResponse
-                  })
-                  .then(() => {
-                    Util.callAllTimeouts();
-                    return Expect.waitForAjaxRequests(6, test); // 6: failureResponse
-                  })
-                  .then(() => {
-                    Util.callAllTimeouts();
-                    return Expect.waitForAjaxRequests(7, test); // 7: failureResponse
-                  })
-                  .then(() => {
-                    return Expect.wait(function () {
-                      return test.form.hasWarningMessage();
-                    }, test);
-                  });
+                return Expect.wait(function () {
+                  return test.form.hasWarningMessage();
+                }, test);
               }
               return setupOktaPushWithIntrospect().then(function (test) {
                 spyOn(test.router.settings, 'callGlobalError');
@@ -3131,7 +3061,6 @@ function (Okta,
                     expect(test.form.submitButtonText()).toBe('Push sent!');
                     expect(test.form.warningMessage()).toBe(
                       'Haven\'t received a push notification yet? Try opening the Okta Verify App on your phone.');
-                    Util.callAllTimeouts();
                     return Expect.waitForFormError(test.form, test);
                   })
                   .then(function (test) {
@@ -3163,18 +3092,18 @@ function (Okta,
           });
           itp('calls authClient verifyFactor with correct args when submitted', function () {
             return setupOktaPushWithTOTP().then(function (test) {
-              Util.resetAjaxRequests();
+              $.ajax.calls.reset();
               test.form[1].inlineTOTPAdd().click();
               test.form[1].setAnswer('654321');
               test.setNextResponse(resSuccess);
               test.form[1].inlineTOTPVerify().click();
               return Expect.wait(function () {
-                return Util.numAjaxRequests() > 0;
+                return $.ajax.calls.count() > 0;
               }, test);
             })
               .then(function () {
-                expect(Util.numAjaxRequests()).toBe(1);
-                Expect.isJsonPost(Util.getAjaxRequest(0), {
+                expect($.ajax.calls.count()).toBe(1);
+                Expect.isJsonPost($.ajax.calls.argsFor(0), {
                   url: 'https://foo.com/api/v1/authn/factors/osthw62MEvG6YFuHe0g3/verify?rememberDevice=false',
                   data: {
                     passCode: '654321',
@@ -3191,7 +3120,7 @@ function (Okta,
                 return setupPolling(test, resRejectedPush)
                   .then(function () {
                     return Expect.wait(function () {
-                      return Util.numAjaxRequests() === 3;
+                      return $.ajax.calls.count() === 3;
                     }, test);
                   })
                   // Final response - REJECTED
@@ -3216,19 +3145,19 @@ function (Okta,
           });
           itp('calls authClient verifyFactor with rememberDevice URL param', function () {
             return setupOktaPushWithTOTP().then(function (test) {
-              Util.resetAjaxRequests();
+              $.ajax.calls.reset();
               test.form[1].inlineTOTPAdd().click();
               test.form[1].setAnswer('654321');
               setRememberDeviceForPushForm(test, true);
               test.setNextResponse(resSuccess);
               test.form[1].inlineTOTPVerify().click();
               return Expect.wait(function () {
-                return Util.numAjaxRequests() > 0;
+                return $.ajax.calls.count() > 0;
               }, test);
             })
               .then(function () {
-                expect(Util.numAjaxRequests()).toBe(1);
-                Expect.isJsonPost(Util.getAjaxRequest(0), {
+                expect($.ajax.calls.count()).toBe(1);
+                Expect.isJsonPost($.ajax.calls.argsFor(0), {
                   url: 'https://foo.com/api/v1/authn/factors/osthw62MEvG6YFuHe0g3/verify?rememberDevice=true',
                   data: {
                     passCode: '654321',
@@ -3259,13 +3188,13 @@ function (Okta,
             return setupOktaPushWithTOTP()
               .then(function (test) {
                 var form = test.form[1];
-                Util.resetAjaxRequests();
+                $.ajax.calls.reset();
                 form.inlineTOTPAdd().click();
                 form.inlineTOTPVerify().click();
                 return Expect.waitForFormError(form, form);
               })
               .then(function (form) {
-                expect(Util.numAjaxRequests()).toBe(0);
+                expect($.ajax).not.toHaveBeenCalled();
                 expect(form.errorMessage()).toBe('We found some errors. Please review the form and make corrections.');
                 expect(form.passCodeErrorField().text()).toBe('This field cannot be left blank');
               });
@@ -3335,8 +3264,8 @@ function (Okta,
         });
         itp('makes the right init request', function () {
           return setupDuo().then(function () {
-            expect(Util.numAjaxRequests()).toBe(2);
-            Expect.isJsonPost(Util.getAjaxRequest(1), {
+            expect($.ajax.calls.count()).toBe(2);
+            Expect.isJsonPost($.ajax.calls.argsFor(1), {
               url: 'https://foo.com/api/v1/authn/factors/ost947vv5GOSPjt9C0g4/verify?rememberDevice=false',
               data: {
                 stateToken: 'testStateToken'
@@ -3347,7 +3276,7 @@ function (Okta,
         itp('makes the correct request when rememberDevice is checked', function () {
           return setupDuo()
             .then(function (test) {
-              Util.resetAjaxRequests();
+              $.ajax.calls.reset();
               test.form.setRememberDevice(true);
               test.setNextResponse(resSuccess);
               // Duo callback (returns an empty response)
@@ -3361,8 +3290,8 @@ function (Okta,
               return Expect.waitForSpyCall(test.successSpy, test);
             })
             .then(function () {
-              expect(Util.numAjaxRequests()).toBe(2);
-              Expect.isJsonPost(Util.getAjaxRequest(1), {
+              expect($.ajax.calls.count()).toBe(2);
+              Expect.isJsonPost($.ajax.calls.argsFor(1), {
                 url: 'https://foo.com/api/v1/authn/factors/ost947vv5GOSPjt9C0g4/verify?rememberDevice=true',
                 data: {
                   stateToken: 'testStateToken'
@@ -3382,7 +3311,7 @@ function (Okta,
         itp('notifies okta when duo is done, and completes verification', function () {
           return setupDuo()
             .then(function (test) {
-              Util.resetAjaxRequests();
+              $.ajax.calls.reset();
               test.setNextResponse(resSuccess);
               // Duo callback (returns an empty response)
               test.setNextResponse({
@@ -3395,16 +3324,16 @@ function (Okta,
               return Expect.waitForSpyCall(test.successSpy, test);
             })
             .then(function () {
-              expect(Util.numAjaxRequests()).toBe(2);
-              Expect.isFormPost(Util.getAjaxRequest(0), {
+              expect($.ajax.calls.count()).toBe(2);
+              Expect.isJsonPost($.ajax.calls.argsFor(0), {
                 url: 'https://foo.com/api/v1/authn/factors/ost947vv5GOSPjt9C0g4/verify/response',
                 data: {
-                  id: ['ost947vv5GOSPjt9C0g4'],
-                  stateToken: ['testStateToken'],
-                  sig_response: ['someSignedResponse']
+                  id: 'ost947vv5GOSPjt9C0g4',
+                  stateToken: 'testStateToken',
+                  sig_response: 'someSignedResponse'
                 }
               });
-              Expect.isJsonPost(Util.getAjaxRequest(1), {
+              Expect.isJsonPost($.ajax.calls.argsFor(1), {
                 url: 'https://foo.com/api/v1/authn/factors/ost947vv5GOSPjt9C0g4/verify',
                 data: {
                   stateToken: 'testStateToken'
@@ -3454,8 +3383,8 @@ function (Okta,
                 'NONCE',
                 [{ id: 'credentialId' }]
               );
-              expect(Util.numAjaxRequests()).toBe(3);
-              Expect.isJsonPost(Util.getAjaxRequest(2), {
+              expect($.ajax.calls.count()).toBe(3);
+              Expect.isJsonPost($.ajax.calls.argsFor(2), {
                 url: 'https://foo.com/api/v1/authn/factors/webauthnFactorId/verify',
                 data: {
                   authenticatorData: 'authenticatorData1234',
@@ -3477,7 +3406,7 @@ function (Okta,
             })
             .then(function (test) {
               expect(test.form.el('o-form-error-html').length).toBe(0);
-              expect(Util.numAjaxRequests()).toBe(2);
+              expect($.ajax.calls.count()).toBe(2);
             });
         });
 
@@ -3495,7 +3424,7 @@ function (Okta,
               expect(test.form.errorBox().text().trim())
                 .toBe('Windows Hello is not configured. Select the Start button, ' +
                     'then select Settings - Accounts - Sign-in to configure Windows Hello.');
-              expect(Util.numAjaxRequests()).toBe(2);
+              expect($.ajax.calls.count()).toBe(2);
             });
         });
 
@@ -3513,7 +3442,7 @@ function (Okta,
               expect(test.form.errorBox().text().trim())
                 .toBe('Your Windows Hello enrollment does not match our records. ' +
                     'Select another factor or contact your administrator for assistance.');
-              expect(Util.numAjaxRequests()).toBe(2);
+              expect($.ajax.calls.count()).toBe(2);
             });
         });
 
@@ -3656,8 +3585,8 @@ function (Okta,
                 [ { version: 'U2F_V2', keyHandle: 'someCredentialId' } ],
                 jasmine.any(Function)
               );
-              expect(Util.numAjaxRequests()).toBe(3);
-              Expect.isJsonPost(Util.getAjaxRequest(2), {
+              expect($.ajax.calls.count()).toBe(3);
+              Expect.isJsonPost($.ajax.calls.argsFor(2), {
                 url: 'https://foo.com/api/v1/authn/factors/u2fFactorId/verify?rememberDevice=false',
                 data: {
                   clientData: 'someClientData',
@@ -3689,8 +3618,8 @@ function (Okta,
                 [ { version: 'U2F_V2', keyHandle: 'someCredentialId' } ],
                 jasmine.any(Function)
               );
-              expect(Util.numAjaxRequests()).toBe(3);
-              Expect.isJsonPost(Util.getAjaxRequest(2), {
+              expect($.ajax.calls.count()).toBe(3);
+              Expect.isJsonPost($.ajax.calls.argsFor(2), {
                 url: 'https://foo.com/api/v1/authn/factors/u2fFactorId/verify?rememberDevice=true',
                 data: {
                   clientData: 'someClientData',
@@ -3702,7 +3631,7 @@ function (Okta,
         });
 
         itp('shows an error if u2f.sign fails', function () {
-          Expect.allowUnhandledPromiseRejection();
+          Q.stopUnhandledRejectionTracking();
           var signStub = function (appId, nonce, registeredKeys, callback) {
             callback({ errorCode: 2 });
           };
@@ -3804,15 +3733,15 @@ function (Okta,
         });
         itp('calls authClient verifyFactor with rememberDevice URL param', function () {
           return setupCustomSAMLFactor().then(function (test) {
-            Util.resetAjaxRequests();
+            $.ajax.calls.reset();
             test.setNextResponse(resSuccess);
             test.form.setRememberDevice(true);
             test.form.submit();
             return Expect.waitForSpyCall(test.successSpy);
           })
             .then(function () {
-              expect(Util.numAjaxRequests()).toBe(1);
-              Expect.isJsonPost(Util.getAjaxRequest(0), {
+              expect($.ajax.calls.count()).toBe(1);
+              Expect.isJsonPost($.ajax.calls.argsFor(0), {
                 url: 'http://rain.okta1.com:1802/api/v1/authn/factors/customFactorId/verify?rememberDevice=true',
                 data: {
                   stateToken: 'testStateToken'
@@ -3889,15 +3818,15 @@ function (Okta,
         });
         itp('calls authClient verifyFactor with rememberDevice URL param', function () {
           return setupCustomOIDCFactor().then(function (test) {
-            Util.resetAjaxRequests();
+            $.ajax.calls.reset();
             test.setNextResponse(resSuccess);
             test.form.setRememberDevice(true);
             test.form.submit();
             return Expect.waitForSpyCall(test.successSpy);
           })
             .then(function () {
-              expect(Util.numAjaxRequests()).toBe(1);
-              Expect.isJsonPost(Util.getAjaxRequest(0), {
+              expect($.ajax.calls.count()).toBe(1);
+              Expect.isJsonPost($.ajax.calls.argsFor(0), {
                 url: 'http://rain.okta1.com:1802/api/v1/authn/factors/customFactorId/verify?rememberDevice=true',
                 data: {
                   stateToken: 'testStateToken'
@@ -3984,15 +3913,15 @@ function (Okta,
         });
         itp('calls authClient verifyFactor with rememberDevice URL param', function () {
           return setupClaimsProviderFactorWithIntrospect().then(function (test) {
-            Util.resetAjaxRequests();
+            $.ajax.calls.reset();
             test.setNextResponse(resSuccess);
             test.form.setRememberDevice(true);
             test.form.submit();
             return Expect.waitForSpyCall(test.successSpy);
           })
             .then(function () {
-              expect(Util.numAjaxRequests()).toBe(1);
-              Expect.isJsonPost(Util.getAjaxRequest(0), {
+              expect($.ajax.calls.count()).toBe(1);
+              Expect.isJsonPost($.ajax.calls.argsFor(0), {
                 url: 'http://rain.okta1.com:1802/api/v1/authn/factors/claimsProviderFactorId/verify?rememberDevice=true',
                 data: {
                   stateToken: 'testStateToken'
@@ -4087,15 +4016,15 @@ function (Okta,
           });
           itp('calls authClient verifyFactor with rememberDevice URL param', function () {
             return setupMfaChallengeClaimsFactor(this.options).then(function (test) {
-              Util.resetAjaxRequests();
+              $.ajax.calls.reset();
               test.setNextResponse(resSuccess);
               test.form.setRememberDevice(true);
               test.form.submit();
               return Expect.waitForSpyCall(test.successSpy);
             })
               .then(function () {
-                expect(Util.numAjaxRequests()).toBe(1);
-                Expect.isJsonPost(Util.getAjaxRequest(0), {
+                expect($.ajax.calls.count()).toBe(1);
+                Expect.isJsonPost($.ajax.calls.argsFor(0), {
                   url: 'http://rain.okta1.com:1802/api/v1/authn/factors/claimsProviderFactorId/verify?rememberDevice=true',
                   data: {
                     stateToken: 'testStateToken'
@@ -4156,7 +4085,7 @@ function (Okta,
               return Expect.waitForVerifyQuestion(test);
             })
               .then(function (test) {
-                Util.resetAjaxRequests();
+                $.ajax.calls.reset();
                 test.setNextResponse(resSuccess);
                 test.questionForm = new MfaVerifyForm($sandbox.find('.o-form'));
                 test.questionForm.setAnswer('food');
@@ -4164,8 +4093,8 @@ function (Okta,
                 return Expect.waitForSpyCall(test.successSpy);
               })
               .then(function () {
-                expect(Util.numAjaxRequests()).toBe(1);
-                Expect.isJsonPost(Util.getAjaxRequest(0), {
+                expect($.ajax.calls.count()).toBe(1);
+                Expect.isJsonPost($.ajax.calls.argsFor(0), {
                   url: 'https://foo.com/api/v1/authn/factors/ufshpdkgNun3xNE3W0g3/verify?rememberDevice=false',
                   data: {
                     answer: 'food',
@@ -4243,15 +4172,15 @@ function (Okta,
 
       itp('calls authClient verifyFactor with correct args when submitted', function () {
         return setupFn().then(function (test) {
-          Util.resetAjaxRequests();
+          $.ajax.calls.reset();
           test.form.setAnswer('123456');
           test.setNextResponse(resSuccess);
           test.form.submit();
           return Expect.waitForSpyCall(test.successSpy);
         })
           .then(function () {
-            expect(Util.numAjaxRequests()).toBe(1);
-            Expect.isJsonPost(Util.getAjaxRequest(0), {
+            expect($.ajax.calls.count()).toBe(1);
+            Expect.isJsonPost($.ajax.calls.argsFor(0), {
               url: 'https://foo.com/api/v1/authn/factors/ufthp18Zup4EGLtrd0g2/verify?rememberDevice=false',
               data: {
                 passCode: '123456',
@@ -4263,7 +4192,7 @@ function (Okta,
 
       itp('calls authClient verifyFactor with correct args when submitted when rememberDevice is checked', function () {
         return setupFn().then(function (test) {
-          Util.resetAjaxRequests();
+          $.ajax.calls.reset();
           test.form.setAnswer('123456');
           test.form.setRememberDevice(true);
           test.setNextResponse(resSuccess);
@@ -4271,8 +4200,8 @@ function (Okta,
           return Expect.waitForSpyCall(test.successSpy);
         })
           .then(function () {
-            expect(Util.numAjaxRequests()).toBe(1);
-            Expect.isJsonPost(Util.getAjaxRequest(0), {
+            expect($.ajax.calls.count()).toBe(1);
+            Expect.isJsonPost($.ajax.calls.argsFor(0), {
               url: 'https://foo.com/api/v1/authn/factors/ufthp18Zup4EGLtrd0g2/verify?rememberDevice=true',
               data: {
                 passCode: '123456',
@@ -4291,7 +4220,7 @@ function (Okta,
       switchFactorTest(setupSMS, setupOktaPushWithTOTP, setupGoogleTOTPAutoPushTrue, resAllFactors, resSuccess, resChallengeSms, 'testStateToken');
       itp('Verify DUO after switching from SMS MFA_CHALLENGE', function () {
         return setupSMS().then(function (test) {
-          Util.resetAjaxRequests();
+          $.ajax.calls.reset();
           test.setNextResponse(resChallengeSms);
           test.form.smsSendCode().click();
           return Expect.wait(function () {
@@ -4314,7 +4243,7 @@ function (Okta,
           return setupPolling(test, resRejectedPush)
             .then(function () { return tick(test); }) // Final response - REJECTED
             .then(function (test) {
-              Util.resetAjaxRequests();
+              $.ajax.calls.reset();
               test.setNextResponse([resAllFactors, resSuccess]);
               test.totpForm = new MfaVerifyForm($($sandbox.find('.o-form')[1]));
               // click or enter code in the the Totp form
@@ -4322,19 +4251,19 @@ function (Okta,
               test.totpForm.setAnswer('654321');
               test.totpForm.inlineTOTPVerify().click();
               return Expect.wait(function () {
-                return Util.numAjaxRequests() === 2;
+                return $.ajax.calls.count() === 2;
               }, test);
             })
             .then(function () {
-              expect(Util.numAjaxRequests()).toBe(2);
+              expect($.ajax.calls.count()).toBe(2);
               // MFA_CHALLENGE to MFA_REQUIRED
-              Expect.isJsonPost(Util.getAjaxRequest(0), {
+              Expect.isJsonPost($.ajax.calls.argsFor(0), {
                 url: 'https://foo.com/api/v1/authn/previous',
                 data: {
                   stateToken: 'testStateToken'
                 }
               });
-              Expect.isJsonPost(Util.getAjaxRequest(1), {
+              Expect.isJsonPost($.ajax.calls.argsFor(1), {
                 url: 'https://foo.com/api/v1/authn/factors/osthw62MEvG6YFuHe0g3/verify?rememberDevice=false',
                 data: {
                   passCode: '654321',
@@ -4374,7 +4303,7 @@ function (Okta,
           // during polling).
           return setupPolling(test, resTimeoutPush)
             .then(function (test) {
-              Util.resetAjaxRequests();
+              $.ajax.calls.reset();
               test.setNextResponse([resAllFactors, resSuccess]);
               test.totpForm = new MfaVerifyForm($($sandbox.find('.o-form')[1]));
               // click or enter code in the the Totp form
@@ -4382,12 +4311,12 @@ function (Okta,
               test.totpForm.setAnswer('654321');
               test.totpForm.inlineTOTPVerify().click();
               return Expect.wait(function () {
-                return Util.numAjaxRequests() === 2;
+                return $.ajax.calls.count() === 2;
               }, test);
             })
             .then(function () {
-              expect(Util.numAjaxRequests()).toBe(2);
-              Expect.isJsonPost(Util.getAjaxRequest(1), {
+              expect($.ajax.calls.count()).toBe(2);
+              Expect.isJsonPost($.ajax.calls.argsFor(1), {
                 url: 'https://foo.com/api/v1/authn/factors/osthw62MEvG6YFuHe0g3/verify?rememberDevice=false',
                 data: {
                   passCode: '654321',
@@ -4402,6 +4331,8 @@ function (Okta,
     Expect.describe('Browser back button does not change view', function () {
       itp('from mfa verify controller', function () {
         return setupAllFactorsWithRouter().then(function (test) {
+          spyOn(window, 'addEventListener');
+          test.router.start();
           expectHasRightBeaconImage(test, 'mfa-okta-security-question');
           test.beacon.dropDownButton().click();
           clickFactorInDropdown(test, 'SMS');
@@ -4422,8 +4353,8 @@ function (Okta,
       });
       itp('from duo controller', function () {
         return setupAllFactorsWithRouter().then(function (test) {
-          // spyOn(window, 'addEventListener');
-          // test.router.start();
+          spyOn(window, 'addEventListener');
+          test.router.start();
           expectHasRightBeaconImage(test, 'mfa-okta-security-question');
           spyOn(Duo, 'init');
           test.setNextResponse(resChallengeDuo);
@@ -4448,6 +4379,8 @@ function (Okta,
         return emulateWindows()
           .then(setupAllFactorsWithRouter)
           .then(function (test) {
+            spyOn(window, 'addEventListener');
+            test.router.start();
             expectHasRightBeaconImage(test, 'mfa-okta-security-question');
             test.setNextResponse(resChallengeWindowsHello);
             test.beacon.dropDownButton().click();
@@ -4469,32 +4402,34 @@ function (Okta,
       });
       itp('from u2f controller', function () {
         return setupAllFactorsWithRouter().then(function (test) {
+          spyOn(window, 'addEventListener');
+          test.router.start();
           expectHasRightBeaconImage(test, 'mfa-okta-security-question');
-          window.u2f = {
-            sign: function () {
-            }
-          };
-          spyOn(window.u2f, 'sign');
-          test.setNextResponse(resChallengeU2F);
-          test.beacon.dropDownButton().click();
-          clickFactorInDropdown(test, 'U2F');
-          return Expect.wait(function () {
-            return test.beacon.hasClass('mfa-u2f');
-          }, test);
+          return test;
         })
-        .then(function (test) {
-          expectHasRightBeaconImage(test, 'mfa-u2f');
-          return Expect.waitForSpyCall(window.addEventListener, test);
-        })
-        .then(function (test) {
-          Util.triggerBrowserBackButton();
-          return tick(test);
-        })
-        .then(function (test) {
-        //view is still the same
-          expectHasRightBeaconImage(test, 'mfa-u2f');
-          Util.stopRouter();
-        });
+          .then(function (test) {
+            window.u2f = {
+              sign: function () {
+              }
+            };
+            spyOn(window.u2f, 'sign');
+            test.setNextResponse(resChallengeU2F);
+            test.beacon.dropDownButton().click();
+            clickFactorInDropdown(test, 'U2F');
+            return Expect.wait(function () {
+              return test.beacon.hasClass('mfa-u2f');
+            }, test);
+          })
+          .then(function (test) {
+            expectHasRightBeaconImage(test, 'mfa-u2f');
+            Util.triggerBrowserBackButton();
+            return tick(test);
+          })
+          .then(function (test) {
+          //view is still the same
+            expectHasRightBeaconImage(test, 'mfa-u2f');
+            Util.stopRouter();
+          });
       });
     });
 
@@ -4502,7 +4437,7 @@ function (Okta,
       itp('is NOT TRAPPED when Mfa verify follows password re-auth', function () {
         return setupPassword().then(function (test) {
           spyOn(RouterUtil, 'handleResponseStatus').and.callThrough();
-          Util.resetAjaxRequests();
+          $.ajax.calls.reset();
           test.form.setPassword('Abcd1234');
           test.form.setRememberDevice(true);
           test.setNextResponse(resAllFactors);
@@ -4643,8 +4578,8 @@ function (Okta,
                   { version: 'U2F_V2', keyHandle: 'someCredentialId3' }],
                 jasmine.any(Function)
               );
-              expect(Util.numAjaxRequests()).toBe(3);
-              Expect.isJsonPost(Util.getAjaxRequest(2), {
+              expect($.ajax.calls.count()).toBe(3);
+              Expect.isJsonPost($.ajax.calls.argsFor(2), {
                 url: 'https://foo.com/api/v1/authn/factors/u2f/verify?rememberDevice=false',
                 data: {
                   clientData: 'someClientData',
@@ -4678,8 +4613,8 @@ function (Okta,
                   { version: 'U2F_V2', keyHandle: 'someCredentialId3' }],
                 jasmine.any(Function)
               );
-              expect(Util.numAjaxRequests()).toBe(3);
-              Expect.isJsonPost(Util.getAjaxRequest(2), {
+              expect($.ajax.calls.count()).toBe(3);
+              Expect.isJsonPost($.ajax.calls.argsFor(2), {
                 url: 'https://foo.com/api/v1/authn/factors/u2f/verify?rememberDevice=true',
                 data: {
                   clientData: 'someClientData',
@@ -4691,7 +4626,7 @@ function (Okta,
         });
 
         itp('shows an error if u2f.sign fails', function () {
-          Expect.allowUnhandledPromiseRejection();
+          Q.stopUnhandledRejectionTracking();
           var signStub = function (appId, nonce, registeredKeys, callback) {
             callback({ errorCode: 2 });
           };
@@ -4790,8 +4725,8 @@ function (Okta,
                   { version: 'U2F_V2', keyHandle: 'someCredentialId3' }],
                 jasmine.any(Function)
               );
-              expect(Util.numAjaxRequests()).toBe(3);
-              Expect.isJsonPost(Util.getAjaxRequest(2), {
+              expect($.ajax.calls.count()).toBe(3);
+              Expect.isJsonPost($.ajax.calls.argsFor(2), {
                 url: 'https://foo.com/api/v1/authn/factors/u2f/verify?rememberDevice=false',
                 data: {
                   clientData: 'someClientData',
@@ -4825,8 +4760,8 @@ function (Okta,
                   { version: 'U2F_V2', keyHandle: 'someCredentialId3' }],
                 jasmine.any(Function)
               );
-              expect(Util.numAjaxRequests()).toBe(3);
-              Expect.isJsonPost(Util.getAjaxRequest(2), {
+              expect($.ajax.calls.count()).toBe(3);
+              Expect.isJsonPost($.ajax.calls.argsFor(2), {
                 url: 'https://foo.com/api/v1/authn/factors/u2f/verify?rememberDevice=true',
                 data: {
                   clientData: 'someClientData',
@@ -4838,7 +4773,7 @@ function (Okta,
         });
 
         itp('shows an error if u2f.sign fails', function () {
-          Expect.allowUnhandledPromiseRejection();
+          Q.stopUnhandledRejectionTracking();
           var signStub = function (appId, nonce, registeredKeys, callback) {
             callback({ errorCode: 2 });
           };
@@ -4905,15 +4840,15 @@ function (Okta,
 
         itp('calls factorType-url with correct args', function () {
           return setupMultipleOktaTOTP().then(function (test) {
-            Util.resetAjaxRequests();
+            $.ajax.calls.reset();
             test.form.setAnswer('123456');
             test.setNextResponse(resSuccess);
             test.form.submit();
             return Expect.waitForSpyCall(test.successSpy);
           })
             .then(function () {
-              expect(Util.numAjaxRequests()).toBe(1);
-              Expect.isJsonPost(Util.getAjaxRequest(0), {
+              expect($.ajax.calls.count()).toBe(1);
+              Expect.isJsonPost($.ajax.calls.argsFor(0), {
                 url: 'https://foo.com/api/v1/authn/factors/token:software:totp/verify?rememberDevice=false',
                 data: {
                   passCode: '123456',
@@ -4925,7 +4860,7 @@ function (Okta,
 
         itp('calls factorType-url with correct args and rememberDevice URL param', function () {
           return setupMultipleOktaTOTP().then(function (test) {
-            Util.resetAjaxRequests();
+            $.ajax.calls.reset();
             test.form.setAnswer('123456');
             test.form.setRememberDevice(true);
             test.setNextResponse(resSuccess);
@@ -4933,8 +4868,8 @@ function (Okta,
             return Expect.waitForSpyCall(test.successSpy);
           })
             .then(function () {
-              expect(Util.numAjaxRequests()).toBe(1);
-              Expect.isJsonPost(Util.getAjaxRequest(0), {
+              expect($.ajax.calls.count()).toBe(1);
+              Expect.isJsonPost($.ajax.calls.argsFor(0), {
                 url: 'https://foo.com/api/v1/authn/factors/token:software:totp/verify?rememberDevice=true',
                 data: {
                   passCode: '123456',
@@ -4988,14 +4923,14 @@ function (Okta,
 
         itp('calls verifyFactor with correct args for 1st push on the list', function () {
           return setupMultipleOktaPush().then(function (test) {
-            Util.resetAjaxRequests();
+            $.ajax.calls.reset();
             test.setNextResponse(resSuccess);
             test.form.submit();
             return Expect.waitForSpyCall(test.successSpy);
           })
             .then(function () {
-              expect(Util.numAjaxRequests()).toBe(1);
-              Expect.isJsonPost(Util.getAjaxRequest(0), {
+              expect($.ajax.calls.count()).toBe(1);
+              Expect.isJsonPost($.ajax.calls.argsFor(0), {
                 url: 'https://foo.com/api/v1/authn/factors/oktaVerifyPush1/verify?rememberDevice=false',
                 data: {
                   stateToken: 'testStateToken'
@@ -5012,14 +4947,14 @@ function (Okta,
           })
             .then(function (test) {
               test.form = getPageForm();
-              Util.resetAjaxRequests();
+              $.ajax.calls.reset();
               test.setNextResponse(resSuccess);
               test.form.submit();
               return Expect.waitForSpyCall(test.successSpy);
             })
             .then(function () {
-              expect(Util.numAjaxRequests()).toBe(1);
-              Expect.isJsonPost(Util.getAjaxRequest(0), {
+              expect($.ajax.calls.count()).toBe(1);
+              Expect.isJsonPost($.ajax.calls.argsFor(0), {
                 url: 'https://foo.com/api/v1/authn/factors/oktaVerifyPush2/verify?rememberDevice=false',
                 data: {
                   stateToken: 'testStateToken'
@@ -5125,7 +5060,7 @@ function (Okta,
 
         itp('calls factorType-url with correct args for 1st TOTP on the list', function () {
           return setupMultipleOktaVerify().then(function (test) {
-            Util.resetAjaxRequests();
+            $.ajax.calls.reset();
             test.form[1].inlineTOTPAdd().click();
             test.form[1].setAnswer('654321');
             test.setNextResponse(resSuccess);
@@ -5133,8 +5068,8 @@ function (Okta,
             return tick();
           })
             .then(function () {
-              expect(Util.numAjaxRequests()).toBe(1);
-              Expect.isJsonPost(Util.getAjaxRequest(0), {
+              expect($.ajax.calls.count()).toBe(1);
+              Expect.isJsonPost($.ajax.calls.argsFor(0), {
                 url: 'https://foo.com/api/v1/authn/factors/token:software:totp/verify?rememberDevice=false',
                 data: {
                   passCode: '654321',
@@ -5146,14 +5081,14 @@ function (Okta,
 
         itp('calls verifyFactor with correct args for 1st push on the list', function () {
           return setupMultipleOktaVerify().then(function (test) {
-            Util.resetAjaxRequests();
+            $.ajax.calls.reset();
             test.setNextResponse(resSuccess);
             test.form[0].submit();
             return Expect.waitForSpyCall(test.successSpy);
           })
             .then(function () {
-              expect(Util.numAjaxRequests()).toBe(1);
-              Expect.isJsonPost(Util.getAjaxRequest(0), {
+              expect($.ajax.calls.count()).toBe(1);
+              Expect.isJsonPost($.ajax.calls.argsFor(0), {
                 url: 'https://foo.com/api/v1/authn/factors/oktaVerifyPush1/verify?rememberDevice=false',
                 data: {
                   stateToken: 'testStateToken'
@@ -5169,7 +5104,7 @@ function (Okta,
             return tick(test);
           })
             .then(function (test) {
-              Util.resetAjaxRequests();
+              $.ajax.calls.reset();
               test.form = getPageForm();
               test.form[1].inlineTOTPAdd().click();
               test.form[1].setAnswer('654321');
@@ -5178,8 +5113,8 @@ function (Okta,
               return tick();
             })
             .then(function () {
-              expect(Util.numAjaxRequests()).toBe(1);
-              Expect.isJsonPost(Util.getAjaxRequest(0), {
+              expect($.ajax.calls.count()).toBe(1);
+              Expect.isJsonPost($.ajax.calls.argsFor(0), {
                 url: 'https://foo.com/api/v1/authn/factors/token:software:totp/verify?rememberDevice=false',
                 data: {
                   passCode: '654321',
@@ -5197,14 +5132,14 @@ function (Okta,
           })
             .then(function (test) {
               test.form = getPageForm();
-              Util.resetAjaxRequests();
+              $.ajax.calls.reset();
               test.setNextResponse(resSuccess);
               test.form[0].submit();
               return Expect.waitForSpyCall(test.successSpy);
             })
             .then(function () {
-              expect(Util.numAjaxRequests()).toBe(1);
-              Expect.isJsonPost(Util.getAjaxRequest(0), {
+              expect($.ajax.calls.count()).toBe(1);
+              Expect.isJsonPost($.ajax.calls.argsFor(0), {
                 url: 'https://foo.com/api/v1/authn/factors/oktaVerifyPush2/verify?rememberDevice=false',
                 data: {
                   stateToken: 'testStateToken'

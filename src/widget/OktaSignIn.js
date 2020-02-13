@@ -138,7 +138,7 @@ var OktaSignIn = (function () {
     var OktaAuth = require('@okta/okta-auth-js');
 
     var authParams = _.extend({
-      issuer: options.issuer || options.baseUrl,
+      url: options.baseUrl,
       transformErrorXHR: Util.transformErrorXHR,
       headers: {
         'X-Okta-User-Agent-Extended': 'okta-signin-widget-' + config.version

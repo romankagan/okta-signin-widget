@@ -3,7 +3,7 @@
 define([
   'okta',
   'q',
-  '@okta/okta-auth-js',
+  '@okta/okta-auth-js/jquery',
   'util/Util',
   'util/CryptoUtil',
   'helpers/mocks/Util',
@@ -68,7 +68,7 @@ function (Okta,
   function setup (options) {
     var setNextResponse = Util.mockAjax();
     var baseUrl = 'https://foo.com';
-    var authClient = new OktaAuth({issuer: baseUrl, transformErrorXHR: LoginUtil.transformErrorXHR});
+    var authClient = new OktaAuth({url: baseUrl, transformErrorXHR: LoginUtil.transformErrorXHR});
     var successSpy = jasmine.createSpy('success');
     var afterErrorHandler = jasmine.createSpy('afterErrorHandler');
     var router = createRouter(baseUrl, authClient, successSpy, { 'features.webauthn': true });
@@ -178,7 +178,7 @@ function (Okta,
     mockWebauthn(options);
     var setNextResponse = Util.mockAjax();
     var baseUrl = 'https://foo.com';
-    var authClient = new OktaAuth({issuer: baseUrl, transformErrorXHR: LoginUtil.transformErrorXHR});
+    var authClient = new OktaAuth({url: baseUrl, transformErrorXHR: LoginUtil.transformErrorXHR});
     var successSpy = jasmine.createSpy('success');
     var afterErrorHandler = jasmine.createSpy('afterErrorHandler');
     var router = createRouter(baseUrl, authClient, successSpy, { 'features.webauthn': true });
@@ -296,8 +296,8 @@ function (Okta,
           },
           signal: jasmine.any(Object)
         });
-        expect(Util.numAjaxRequests()).toBe(3);
-        Expect.isJsonPost(Util.getAjaxRequest(2), {
+        expect($.ajax.calls.count()).toBe(3);
+        Expect.isJsonPost($.ajax.calls.argsFor(2), {
           url: 'https://foo.com/api/v1/authn/factors/webauthn/verify?rememberDevice=false',
           data: {
             clientData: testClientData,
@@ -338,8 +338,8 @@ function (Okta,
           },
           signal: jasmine.any(Object)
         });
-        expect(Util.numAjaxRequests()).toBe(3);
-        Expect.isJsonPost(Util.getAjaxRequest(2), {
+        expect($.ajax.calls.count()).toBe(3);
+        Expect.isJsonPost($.ajax.calls.argsFor(2), {
           url: 'https://foo.com/api/v1/authn/factors/webauthn/verify?rememberDevice=true',
           data: {
             clientData: testClientData,
@@ -352,7 +352,7 @@ function (Okta,
     });
 
     itp('shows an error if navigator.credentials.get fails', function () {
-      Expect.allowUnhandledPromiseRejection();
+      Q.stopUnhandledRejectionTracking();
       return setupFn({
         webauthnSupported: true,
         signStatus: 'fail'
@@ -405,8 +405,8 @@ function (Okta,
           },
           signal: jasmine.any(Object)
         });
-        expect(Util.numAjaxRequests()).toBe(3);
-        Expect.isJsonPost(Util.getAjaxRequest(2), {
+        expect($.ajax.calls.count()).toBe(3);
+        Expect.isJsonPost($.ajax.calls.argsFor(2), {
           url: 'https://foo.com/api/v1/authn/factors/webauthnFactorId/verify?rememberDevice=false',
           data: {
             clientData: testClientData,
@@ -440,8 +440,8 @@ function (Okta,
           },
           signal: jasmine.any(Object)
         });
-        expect(Util.numAjaxRequests()).toBe(3);
-        Expect.isJsonPost(Util.getAjaxRequest(2), {
+        expect($.ajax.calls.count()).toBe(3);
+        Expect.isJsonPost($.ajax.calls.argsFor(2), {
           url: 'https://foo.com/api/v1/authn/factors/webauthnFactorId/verify?rememberDevice=true',
           data: {
             clientData: testClientData,
@@ -454,7 +454,7 @@ function (Okta,
     });
 
     itp('shows an error if navigator.credentials.get fails', function () {
-      Expect.allowUnhandledPromiseRejection();
+      Q.stopUnhandledRejectionTracking();
       return setupWebauthnFactor({
         webauthnSupported: true,
         signStatus: 'fail'

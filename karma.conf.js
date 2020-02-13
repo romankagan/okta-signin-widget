@@ -17,9 +17,6 @@ module.exports = (config) => {
       { pattern: './target/css/*.css', watched: true, included: true, served: true },
       { pattern: './target/**/*', watched: false, included: false, served: true },
     ],
-    proxies: {
-      '/img/logos/': 'http://localhost:9876/base/test/unit/assets/'
-    },
     preprocessors: {
       'test/unit/main.js': ['webpack', 'sourcemap'],
     },
@@ -48,7 +45,7 @@ module.exports = (config) => {
       // but this works only with `karma start`, not `karma run`.
       test: config.test,
       jasmine: {
-        timeoutInterval: 100000, // increased timeout for Travis
+        timeoutInterval: 10000, // increased timeout for Travis
         random: false
       }
     },

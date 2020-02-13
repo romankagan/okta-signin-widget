@@ -10,12 +10,6 @@ var plugins = createPlugins({ isProduction: false });
 
 plugins.unshift(new RemoveStrictPlugin());
 
-testConfig.module.rules.push({
-  test: /\.js$/,
-  use: ['source-map-loader'],
-  enforce: 'pre'
-});
-
 testConfig.entry = null;
 testConfig.output = null;
 testConfig.devtool = 'inline-source-map';

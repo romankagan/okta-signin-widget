@@ -1,7 +1,7 @@
 /* eslint max-params:[2, 15] */
 define([
   'okta',
-  '@okta/okta-auth-js',
+  '@okta/okta-auth-js/jquery',
   'util/Util',
   'helpers/mocks/Util',
   'helpers/dom/EnrollCustomFactorForm',
@@ -41,7 +41,7 @@ function (Okta,
     function setup (factorType) {
       var setNextResponse = Util.mockAjax([responseMfaEnrollAll]);
       var baseUrl = 'https://foo.com';
-      var authClient = new OktaAuth({issuer: baseUrl, transformErrorXHR: LoginUtil.transformErrorXHR});
+      var authClient = new OktaAuth({url: baseUrl, transformErrorXHR: LoginUtil.transformErrorXHR});
       var successSpy = jasmine.createSpy('success');
       var afterErrorHandler = jasmine.createSpy('afterErrorHandler');
       var router = new Router({
